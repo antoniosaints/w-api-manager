@@ -107,6 +107,22 @@ test('composer supports media upload, enter send, ctrl-enter newline and message
   assert.match(stylesSource, /\.reply-context/);
 });
 
+test('chat exposes quick scroll to the latest message', () => {
+  const chatWindowSource = readFileSync(new URL('../src/components/chat/ChatWindow.jsx', import.meta.url), 'utf8');
+  assert.match(chatWindowSource, /streamRef/);
+  assert.match(chatWindowSource, /scrollToLatestMessage/);
+  assert.match(chatWindowSource, /showScrollToLatest/);
+  assert.match(chatWindowSource, /chat-scroll-bottom/);
+  assert.match(stylesSource, /\.chat-scroll-bottom/);
+});
+
+test('toast is positioned at the top center of the viewport', () => {
+  assert.match(stylesSource, /\.toast[\s\S]*top:\s*18px/);
+  assert.match(stylesSource, /\.toast[\s\S]*left:\s*50%/);
+  assert.match(stylesSource, /\.toast[\s\S]*transform:\s*translateX\(-50%\)/);
+  assert.doesNotMatch(stylesSource, /\.toast[\s\S]*bottom:\s*22px/);
+});
+
 test('settings expose W-API billing status only through admin-gated payment routes', () => {
   assert.match(settingsSource, /\/api\/wapi\/payment\/status/);
   assert.match(settingsSource, /Pagar fatura/);

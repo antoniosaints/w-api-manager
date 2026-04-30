@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ArrowDown,
   CheckCircle2,
   CornerUpLeft,
   Loader2,
@@ -52,6 +53,8 @@ export function ChatWindow({
   const [sending, setSending] = useState(false);
   const [recordingState, setRecordingState] = useState('idle');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
+  const streamRef = useRef(null);
   const bottomRef = useRef(null);
   const fileInputRef = useRef(null);
   const recorderRef = useRef(null);
@@ -69,7 +72,7 @@ export function ChatWindow({
   const isProcessingRecording = recordingState === 'processing';
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    scrollToLatestMessage('smooth');
   }, [messages.length, selectedSessionId]);
 
   useEffect(() => {
@@ -246,6 +249,18 @@ export function ChatWindow({
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
+  function scrollToLatestMessage(behavior = 'smooth') {
+    bottomRef.current?.scrollIntoView({ behavior, block: 'end' });
+    setShowScrollToLatest(false);
+  }
+
+  function updateScrollToLatestVisibility() {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const distanceFromBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight;
+    setShowScrollToLatest(distanceFromBottom > 180);
+  }
+
   if (!selectedPhone) {
     return (
       <section className="chat-panel empty-state">
@@ -339,7 +354,7 @@ export function ChatWindow({
         </div>
       </div>
 
-      <div className="message-stream">
+      <div className="message-stream" ref={streamRef} onScroll={updateScrollToLatestVisibility}>
         {loadingMessages ? (
           <div className="chat-loading">
             <Loader2 className="spin" size={22} />
@@ -357,6 +372,18 @@ export function ChatWindow({
         )) : <p className="empty stream-empty">Nenhuma mensagem carregada para esta conversa.</p>}
         <div ref={bottomRef} />
       </div>
+
+      {showScrollToLatest && !loadingMessages && (
+        <button
+          type="button"
+          className="chat-scroll-bottom"
+          onClick={() => scrollToLatestMessage()}
+          title="Ir para a ultima mensagem"
+          aria-label="Ir para a ultima mensagem"
+        >
+          <ArrowDown size={18} />
+        </button>
+      )}
 
       <form className="composer composer-shell" onSubmit={submit}>
         {(replyingTo || mediaDraft || mediaProgress > 0 || isRecording || isProcessingRecording) && (

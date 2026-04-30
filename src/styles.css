@@ -1574,6 +1574,7 @@ textarea:focus-visible {
 
 .chat-panel {
   min-width: 0;
+  position: relative;
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
@@ -1636,6 +1637,27 @@ textarea:focus-visible {
     linear-gradient(0deg, color-mix(in srgb, var(--blue) 7%, transparent) 1px, transparent 1px),
     var(--bg-subtle);
   background-size: 28px 28px;
+}
+
+.chat-scroll-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  z-index: 4;
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent-strong) 60%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.22);
+  transform: translateX(-50%);
+}
+
+.chat-scroll-bottom:hover {
+  background: var(--accent-strong);
 }
 
 .chat-loading {
@@ -2477,15 +2499,18 @@ textarea:focus-visible {
 
 .toast {
   position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 10;
+  top: 18px;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  z-index: 30;
   max-width: min(420px, calc(100vw - 44px));
   padding: 13px 16px;
   border-radius: var(--radius);
   color: #fff;
   background: #14211c;
   box-shadow: var(--shadow);
+  transform: translateX(-50%);
 }
 
 :root[data-theme="dark"] .toast {

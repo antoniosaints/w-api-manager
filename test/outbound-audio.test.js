@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { prepareAudioForWapi } from '../server/outbound-audio.js';
+
+const outboundAudioSource = readFileSync(new URL('../server/outbound-audio.js', import.meta.url), 'utf8');
+const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 
 test('W-API audio preparation keeps MP3 and OGG payloads untouched', async () => {
   const media = {
@@ -58,4 +62,10 @@ test('W-API audio preparation rejects unsupported remote audio formats before ca
     }),
     /Formato de audio invalido/
   );
+});
+
+test('W-API audio transcoding uses bundled ffmpeg-static when no environment path is configured', () => {
+  assert.match(packageSource, /"ffmpeg-static":\s*"\^5\.3\.0"/);
+  assert.match(outboundAudioSource, /from 'ffmpeg-static'/);
+  assert.match(outboundAudioSource, /process\.env\.FFMPEG_PATH[\s\S]*process\.env\.WAPI_FFMPEG_PATH[\s\S]*ffmpegPath[\s\S]*'ffmpeg'/);
 });

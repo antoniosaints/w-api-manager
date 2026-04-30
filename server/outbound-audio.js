@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { randomUUID } from 'node:crypto';
+import ffmpegPath from 'ffmpeg-static';
 
 const execFileAsync = promisify(execFile);
 const WAPI_AUDIO_EXTENSIONS = ['mp3', 'ogg'];
@@ -87,7 +87,7 @@ function parseDataUrl(value) {
 }
 
 function resolveFfmpegPath() {
-  return process.env.FFMPEG_PATH || process.env.WAPI_FFMPEG_PATH || 'ffmpeg';
+  return process.env.FFMPEG_PATH || process.env.WAPI_FFMPEG_PATH || ffmpegPath || 'ffmpeg';
 }
 
 function mimeFromDataUrl(value) {
