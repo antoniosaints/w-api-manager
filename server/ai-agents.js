@@ -32,6 +32,9 @@ export function shouldRunAutomaticAgent({ settings, session, message }) {
   const status = session.chatStatus || session.status;
   if (status !== 'waiting') return false;
   if (session.assignedUserId || session.assigned_user_id) return false;
+  if (session.isGroup || session.is_group || message.isGroup || message.is_group) {
+    return isConfiguredInstanceMentioned(settings, message);
+  }
   return true;
 }
 
@@ -103,7 +106,10 @@ export async function runAutomaticAgentForMessage(message, options = {}) {
   const settings = getSettings();
   const session = getSupportSessionById(message.sessionId);
   if (!shouldRunAutomaticAgent({
-    settings: { automaticAttendance: settings.automaticAttendance === 'true' || settings.automaticAttendance === true },
+    settings: {
+      automaticAttendance: settings.automaticAttendance === 'true' || settings.automaticAttendance === true,
+      instanceJid: settings.instanceJid
+    },
     session,
     message
   })) return null;
@@ -156,6 +162,27 @@ export async function runAutomaticAgentForMessage(message, options = {}) {
   }
 
   return { agent, reply, transferred, decision: finalDecision };
+}
+
+function isConfiguredInstanceMentioned(settings = {}, message = {}) {
+  const identity = normalizeMentionIdentity(settings.instanceJid || settings.instancePhone || settings.botJid || '');
+  if (!identity) return false;
+  const sourceMentions = Array.isArray(message.mentions)
+    ? message.mentions
+    : Array.isArray(message.raw?.normalizedMentions)
+      ? message.raw.normalizedMentions
+      : Array.isArray(message.raw?.mentions)
+        ? message.raw.mentions
+        : [];
+  const mentions = sourceMentions.map(normalizeMentionIdentity).filter(Boolean);
+  return mentions.includes(identity);
+}
+
+function normalizeMentionIdentity(value) {
+  const clean = String(value || '').replace(/\s/g, '').trim().toLowerCase();
+  if (!clean) return '';
+  if (clean.endsWith('@s.whatsapp.net') || clean.endsWith('@c.us')) return clean.split('@')[0];
+  return clean.replace(/\D/g, '') || clean;
 }
 
 async function generateGeminiDecision({ agent, prompt }, apiKey) {

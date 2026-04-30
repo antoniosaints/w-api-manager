@@ -9,6 +9,13 @@ test('finds message image source from normalized mediaPath', () => {
   );
 });
 
+test('finds message image source from local outbound uploads path', () => {
+  assert.equal(
+    findMessageImageSource({ type: 'image', mediaPath: '/uploads/outbound/local-image.jpg' }),
+    '/uploads/outbound/local-image.jpg'
+  );
+});
+
 test('finds message image source from raw W-API image payload', () => {
   assert.equal(
     findMessageImageSource({

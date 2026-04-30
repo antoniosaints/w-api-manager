@@ -307,6 +307,32 @@ test('normalizes W-API group payload using group chat and sender metadata', () =
   assert.equal(message.body, 'Mensagem do grupo');
 });
 
+test('normalizes group mentions from W-API context info', () => {
+  const message = normalizeIncomingMessage({
+    event: 'webhookReceived',
+    isGroup: true,
+    messageId: 'group-mention-1',
+    chat: {
+      id: '120363287682702007@g.us',
+      name: 'Grupo Suporte'
+    },
+    sender: {
+      id: '556194072732',
+      pushName: 'Philipe'
+    },
+    msgContent: {
+      extendedTextMessage: {
+        text: '@Bot preciso de ajuda',
+        contextInfo: {
+          mentionedJid: ['5511999999999@s.whatsapp.net']
+        }
+      }
+    }
+  });
+
+  assert.deepEqual(message.mentions, ['5511999999999@s.whatsapp.net']);
+});
+
 test('detects group payloads even when W-API wraps the event in data', () => {
   assert.equal(isGroupPayload({
     data: {

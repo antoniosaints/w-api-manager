@@ -25,7 +25,10 @@ test('agents sectors and tags use modal forms', () => {
 });
 
 test('agents listing exposes compact operational metadata', () => {
+  assert.match(stylesSource, /\.agents-tabs-shell/);
   assert.match(stylesSource, /\.agents-tabs/);
+  assert.match(stylesSource, /\.agents-tabs-list/);
+  assert.match(stylesSource, /\.agents-tab-trigger/);
   assert.match(stylesSource, /\.agent-row/);
   assert.match(stylesSource, /\.agent-meta-grid/);
 });

@@ -6,6 +6,7 @@ const mainSource = readFileSync(new URL('../src/main.jsx', import.meta.url), 'ut
 const apiSource = readFileSync(new URL('../src/shared/api.js', import.meta.url), 'utf8');
 const shellSource = readFileSync(new URL('../src/components/AppShell.jsx', import.meta.url), 'utf8');
 const settingsSource = readFileSync(new URL('../src/pages/SettingsPanel.jsx', import.meta.url), 'utf8');
+const usersSource = readFileSync(new URL('../src/pages/UsersPanel.jsx', import.meta.url), 'utf8');
 const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const serverSource = readFileSync(new URL('../server/index.js', import.meta.url), 'utf8');
 const cssSource = stylesSource;
@@ -63,8 +64,17 @@ test('auth, users, transfer and dashboard screens are wired in the UI', () => {
 test('settings expose ignore groups option and sidebar can collapse', () => {
   assert.match(appSource, /ignoreGroups/);
   assert.match(appSource, /Ignorar grupos/);
+  assert.match(settingsSource, /instanceJid/);
+  assert.match(settingsSource, /JID ou numero do bot/);
   assert.match(mainSource, /sidebarCollapsed/);
   assert.match(appSource, /Alternar menu/);
+});
+
+test('message name header is controlled only from the admin user form', () => {
+  assert.doesNotMatch(shellSource, /Nome da mensagem/);
+  assert.match(usersSource, /sendNameHeader/);
+  assert.match(usersSource, /Nome da mensagem/);
+  assert.doesNotMatch(serverSource, /changes\.sendNameHeader\s*=\s*req\.body\.sendNameHeader/);
 });
 
 test('collapsed sidebar keeps toggle aligned and gives nav icons consistent padding', () => {

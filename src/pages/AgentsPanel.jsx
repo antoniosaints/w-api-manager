@@ -185,12 +185,12 @@ export function AgentsPanel({
         </div>
       </div>
 
-      <div>
-        <Tabs defaultValue="agents" className="agents-tabs p-4">
+      <div className="agents-tabs-shell">
+        <Tabs defaultValue="agents" className="agents-tabs">
           <TabsList className="agents-tabs-list">
-            <TabsTrigger value="agents">Agentes</TabsTrigger>
-            <TabsTrigger value="sectors">Setores</TabsTrigger>
-            <TabsTrigger value="tags">Tags</TabsTrigger>
+            <TabsTrigger value="agents" className="agents-tab-trigger">Agentes</TabsTrigger>
+            <TabsTrigger value="sectors" className="agents-tab-trigger">Setores</TabsTrigger>
+            <TabsTrigger value="tags" className="agents-tab-trigger">Tags</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents" className="agents-tab-content">

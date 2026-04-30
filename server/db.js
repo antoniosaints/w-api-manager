@@ -217,6 +217,7 @@ const now = () => new Date().toISOString();
 const envDefaults = {
   baseUrl: process.env.WAPI_BASE_URL || 'https://api.w-api.app',
   instanceId: process.env.WAPI_INSTANCE_ID || '',
+  instanceJid: process.env.WAPI_INSTANCE_JID || '',
   token: process.env.WAPI_TOKEN || '',
   webhookPublicUrl: process.env.WEBHOOK_PUBLIC_URL || '',
   ignoreGroups: process.env.WAPI_IGNORE_GROUPS || 'false',
@@ -268,6 +269,7 @@ const insertSessionStmt = db.prepare(`
 
 migrateLegacySessions();
 normalizeLegacyGroupChatIds();
+ensureDefaultAdminUser();
 
 export function getSettings() {
   return Object.fromEntries(
@@ -283,6 +285,7 @@ export function publicSettings() {
   return {
     baseUrl: settings.baseUrl,
     instanceId: settings.instanceId,
+    instanceJid: settings.instanceJid,
     webhookPublicUrl: settings.webhookPublicUrl,
     hasToken: Boolean(settings.token),
     ignoreGroups: settings.ignoreGroups === 'true',
@@ -292,7 +295,7 @@ export function publicSettings() {
 }
 
 export function saveSettings(nextSettings) {
-  const writable = ['baseUrl', 'instanceId', 'token', 'webhookPublicUrl', 'ignoreGroups', 'automaticAttendance', 'geminiApiKey'];
+  const writable = ['baseUrl', 'instanceId', 'instanceJid', 'token', 'webhookPublicUrl', 'ignoreGroups', 'automaticAttendance', 'geminiApiKey'];
   const tx = db.transaction(() => {
     for (const key of writable) {
       if (Object.prototype.hasOwnProperty.call(nextSettings, key)) {
@@ -306,6 +309,18 @@ export function saveSettings(nextSettings) {
   });
   tx();
   return publicSettings();
+}
+
+function ensureDefaultAdminUser() {
+  const total = db.prepare('SELECT COUNT(*) AS total FROM users').get().total;
+  if (total > 0) return;
+  createUser({
+    name: 'Administrador',
+    email: 'admim@wapi.local',
+    password: '123',
+    role: 'admin',
+    active: true
+  });
 }
 
 export function createUser({ name, email, password, role = 'attendant', active = true, themeColor = 'green', sendNameHeader = false, sectorIds = [] }) {
@@ -1011,6 +1026,9 @@ function mergeExistingMessage(existing, message = {}) {
 
 function normalizeMessageRaw(message) {
   const raw = message.raw && typeof message.raw === 'object' ? { ...message.raw } : {};
+  if (Array.isArray(message.mentions)) {
+    raw.normalizedMentions = message.mentions;
+  }
   if (message.media && typeof message.media === 'object') {
     raw.normalizedMedia = {
       ...(raw.normalizedMedia || {}),
@@ -1885,6 +1903,7 @@ function mapAiAgent(row) {
 
 function mapMessage(row) {
   if (!row) return null;
+  const raw = safeJson(row.raw_json);
   return {
     id: row.id,
     externalId: row.external_id,
@@ -1901,7 +1920,8 @@ function mapMessage(row) {
     replyToMessageId: row.reply_to_message_id,
     replyToExternalId: row.reply_to_external_id,
     replyPreview: row.reply_preview,
-    raw: safeJson(row.raw_json),
+    raw,
+    mentions: Array.isArray(raw.normalizedMentions) ? raw.normalizedMentions : Array.isArray(raw.mentions) ? raw.mentions : [],
     createdAt: row.created_at
   };
 }

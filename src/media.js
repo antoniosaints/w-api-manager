@@ -131,8 +131,15 @@ function findImageMessage(raw) {
 }
 
 function toImageSource(value, mimetype = 'image/jpeg') {
-  if (String(value).startsWith('data:image') || String(value).startsWith('http')) return String(value);
-  return `data:${mimetype || 'image/jpeg'};base64,${value}`;
+  const source = String(value || '');
+  if (
+    source.startsWith('data:image')
+    || source.startsWith('http')
+    || source.startsWith('blob:')
+    || source.startsWith('/uploads/')
+    || source.startsWith('/api/')
+  ) return source;
+  return `data:${mimetype || 'image/jpeg'};base64,${source}`;
 }
 
 function isWhatsAppMediaUrl(value) {

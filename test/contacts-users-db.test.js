@@ -14,8 +14,10 @@ import {
   deleteUser,
   getContactByPhone,
   getAiAgentById,
+  authenticateUser,
   listContacts,
   listConversations,
+  listUsers,
   listAiAgents,
   listSectors,
   listSupportTags,
@@ -30,7 +32,10 @@ import {
 
 test('test database is isolated from the app sqlite file', () => {
   assert.notEqual(db.name.endsWith('data\\app.sqlite') || db.name.endsWith('data/app.sqlite'), true);
-  assert.equal(db.prepare('SELECT COUNT(*) AS total FROM users').get().total, 0);
+  const defaultAdmin = authenticateUser('admim@wapi.local', '123');
+  assert.equal(defaultAdmin?.role, 'admin');
+  assert.equal(defaultAdmin?.active, true);
+  assert.equal(listUsers().filter((user) => user.email === 'admim@wapi.local').length, 1);
 });
 
 test('contacts can be saved and listed with CRM fields and pagination metadata', () => {

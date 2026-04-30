@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { navItems, pageMeta } from '../app/navigation.jsx';
 import { Button } from './ui/index.js';
-import { Switch } from './ui/index.js';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,7 +80,6 @@ export function Header({
   onRefreshStatus,
   onCycleTheme,
   onAccentChange,
-  onPreferenceChange,
   onLogout
 }) {
   const [title, description] = pageMeta[view] || pageMeta.inbox;
@@ -111,14 +109,6 @@ export function Header({
                   title={color}
                 />
               ))}
-            </div>
-            <DropdownMenuSeparator />
-            <div className="user-menu-switch">
-              <Switch
-                label="Nome da mensagem"
-                checked={Boolean(currentUser?.sendNameHeader)}
-                onChange={(event) => onPreferenceChange?.({ sendNameHeader: event.target.checked })}
-              />
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onLogout}><LogOut size={16} />Sair</DropdownMenuItem>

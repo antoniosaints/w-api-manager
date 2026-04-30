@@ -3,7 +3,7 @@ import { Edit3, Loader2, Plus, Trash2, UserPlus, Users } from 'lucide-react';
 import { api } from '../shared/api.js';
 import { Badge, Button, Card, Checkbox, Input, Modal, Pagination, SearchField, Select, Switch, Table } from '../components/ui/index.js';
 
-const emptyForm = { name: '', email: '', password: '', role: 'attendant', active: true, sectorIds: [] };
+const emptyForm = { name: '', email: '', password: '', role: 'attendant', active: true, sendNameHeader: false, sectorIds: [] };
 
 export function UsersPanel({ onRefresh, onDeleteUser, onError, showToast, currentUser, sectors = [] }) {
   const [rows, setRows] = useState([]);
@@ -32,7 +32,7 @@ export function UsersPanel({ onRefresh, onDeleteUser, onError, showToast, curren
   }
 
   function openEdit(user) {
-    setForm({ name: user.name, email: user.email, password: '', role: user.role, active: user.active, id: user.id, sectorIds: (user.sectors || []).map((sector) => sector.id) });
+    setForm({ name: user.name, email: user.email, password: '', role: user.role, active: user.active, sendNameHeader: Boolean(user.sendNameHeader), id: user.id, sectorIds: (user.sectors || []).map((sector) => sector.id) });
     setModal({ mode: 'edit' });
   }
 
@@ -150,6 +150,7 @@ export function UsersPanel({ onRefresh, onDeleteUser, onError, showToast, curren
               ))}
             </div>
             <Switch label="Usuario ativo" help="Pode entrar no sistema e receber transferencias." checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} />
+            <Switch label="Nome da mensagem" help="Inclui o nome deste usuario no topo das mensagens enviadas." checked={form.sendNameHeader} onChange={(event) => setForm({ ...form, sendNameHeader: event.target.checked })} />
           </form>
         </Modal>
       )}

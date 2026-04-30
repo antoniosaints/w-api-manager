@@ -21,6 +21,21 @@ test('persists outbound data url media to a renderable uploads path', () => {
   assert.equal(readFileSync(absolutePath, 'utf8'), 'hello');
 });
 
+test('persists recorder audio data urls with codec parameters', () => {
+  const stored = persistOutboundMediaReference({
+    type: 'audio',
+    reference: 'data:audio/webm;codecs=opus;base64,aGVsbG8=',
+    fileName: 'gravacao.webm',
+    mimeType: 'audio/webm;codecs=opus'
+  });
+  const absolutePath = path.join(process.env.WAPI_UPLOAD_DIR, stored.relativePath.replace(/^\/uploads\//, ''));
+
+  assert.match(stored.publicPath, /^\/uploads\/outbound\/.+\.webm$/);
+  assert.equal(stored.mimeType, 'audio/webm');
+  assert.equal(existsSync(absolutePath), true);
+  assert.equal(readFileSync(absolutePath, 'utf8'), 'hello');
+});
+
 test('leaves remote outbound media references untouched', () => {
   const stored = persistOutboundMediaReference({
     type: 'audio',

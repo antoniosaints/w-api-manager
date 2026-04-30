@@ -23,6 +23,10 @@ export function normalizeIncomingMessage(payload, fallbackEvent = 'received') {
   const senderPhone = cleanPhone(data.sender?.id || raw.sender?.id || data.participant || raw.participant || '');
   const replyContext = findReplyContext(data) || findReplyContext(raw);
   const fromMe = Boolean(data.fromMe ?? raw.fromMe ?? data.key?.fromMe ?? raw.key?.fromMe);
+  const mentions = normalizeMentions([
+    ...extractMentions(data),
+    ...extractMentions(raw)
+  ]);
 
   return {
     phone,
@@ -37,11 +41,44 @@ export function normalizeIncomingMessage(payload, fallbackEvent = 'received') {
     body: text || `[${fallbackEvent}]`,
     mediaPath,
     media,
+    mentions,
     replyToExternalId: extractReplyExternalId(replyContext),
     replyPreview: extractQuotedPreview(replyContext),
     createdAt: timestamp,
     raw
   };
+}
+
+function extractMentions(source) {
+  if (!source || typeof source !== 'object') return [];
+  const content = source.msgContent || source.message || source;
+  const contexts = [
+    content.extendedTextMessage?.contextInfo,
+    content.imageMessage?.contextInfo,
+    content.videoMessage?.contextInfo,
+    content.stickerMessage?.contextInfo,
+    content.documentMessage?.contextInfo,
+    content.audioMessage?.contextInfo,
+    content.contextInfo,
+    source.contextInfo,
+    source.messageContextInfo
+  ].filter(Boolean);
+  const values = [
+    source.mentionedJid,
+    source.mentions,
+    source.mentioned,
+    content.mentionedJid,
+    content.mentions,
+    content.mentioned,
+    ...contexts.flatMap((context) => [context.mentionedJid, context.mentions, context.mentioned])
+  ];
+  return values.flatMap((value) => Array.isArray(value) ? value : [value]);
+}
+
+function normalizeMentions(values = []) {
+  return [...new Set(values
+    .map((value) => String(value || '').replace(/\s/g, '').trim())
+    .filter(Boolean))];
 }
 
 export function isReactionPayload(payload) {

@@ -219,6 +219,7 @@
 
 * {
   box-sizing: border-box;
+  font-family: sans-serif;
 }
 
 html,
@@ -1285,19 +1286,46 @@ textarea:focus-visible {
   min-width: 0;
 }
 
+.agents-tabs-shell {
+  padding: 16px;
+  border-top: 1px solid var(--line);
+}
+
 .agents-tabs {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .agents-tabs-list {
-  justify-content: flex-start;
-  width: fit-content;
+  width: 100%;
+  height: auto;
+  justify-content: flex-start !important;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+}
+
+.agents-tab-trigger {
+  min-height: 36px;
+  min-width: 88px;
+  flex: 0 0 auto;
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--muted);
+  font-weight: 750;
+}
+
+.agents-tab-trigger[data-state="active"] {
+  background: var(--surface);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow-soft);
 }
 
 .agents-tab-content {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  margin-top: 0;
 }
 
 .automation-strip {
@@ -1305,7 +1333,7 @@ textarea:focus-visible {
   grid-template-columns: minmax(220px, 1fr) minmax(220px, 0.8fr) auto;
   gap: 12px;
   align-items: end;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-soft);
@@ -1335,7 +1363,7 @@ textarea:focus-visible {
 .agent-list,
 .taxonomy-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .agent-row,
@@ -1343,9 +1371,9 @@ textarea:focus-visible {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.2fr) auto auto;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1362,7 +1390,7 @@ textarea:focus-visible {
 
 .agent-row-main {
   display: grid;
-  gap: 2px;
+  gap: 3px;
 }
 
 .agent-row-main small {
@@ -2766,6 +2794,11 @@ textarea:focus-visible {
 
   .agents-tabs-list {
     width: 100%;
+    overflow-x: auto;
+  }
+
+  .agents-tab-trigger {
+    flex: 1 0 0;
   }
 
   .agent-meta-grid {

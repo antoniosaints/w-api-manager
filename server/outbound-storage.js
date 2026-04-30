@@ -25,24 +25,29 @@ export function persistOutboundMediaReference(media = {}) {
     reference,
     publicPath,
     relativePath: publicPath,
-    mimeType: media.mimeType || parsed.mimeType
+    mimeType: cleanMimeType(media.mimeType || parsed.mimeType)
   };
 }
 
 function parseDataUrl(value) {
-  const match = String(value || '').match(/^data:([^;,]+)?(;base64)?,(.*)$/s);
+  const match = String(value || '').match(/^data:([^,]*?),(.*)$/s);
   if (!match) {
     const error = new Error('Midia em base64 invalida.');
     error.status = 400;
     throw error;
   }
-  const mimeType = String(match[1] || 'application/octet-stream').trim();
-  const isBase64 = Boolean(match[2]);
-  const payload = match[3] || '';
+  const meta = String(match[1] || '').split(';').map((item) => item.trim()).filter(Boolean);
+  const mimeType = cleanMimeType(meta.find((item) => item.includes('/')) || 'application/octet-stream');
+  const isBase64 = meta.some((item) => item.toLowerCase() === 'base64');
+  const payload = match[2] || '';
   return {
     mimeType,
     buffer: isBase64 ? Buffer.from(payload, 'base64') : Buffer.from(decodeURIComponent(payload))
   };
+}
+
+function cleanMimeType(value) {
+  return String(value || 'application/octet-stream').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
 }
 
 function extensionFromMime(mimeType) {
@@ -51,6 +56,7 @@ function extensionFromMime(mimeType) {
   if (mime === 'image/png') return 'png';
   if (mime === 'image/webp') return 'webp';
   if (mime === 'audio/ogg') return 'ogg';
+  if (mime === 'audio/webm') return 'webm';
   if (mime === 'audio/mpeg' || mime === 'audio/mp3') return 'mp3';
   if (mime === 'audio/wav' || mime === 'audio/x-wav') return 'wav';
   if (mime === 'audio/mp4' || mime === 'audio/m4a') return 'm4a';

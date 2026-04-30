@@ -31,6 +31,27 @@ test('automatic agents are gated by settings and waiting unassigned sessions', (
   assert.equal(shouldRunAutomaticAgent({ settings: { automaticAttendance: true }, session: { ...session, chatStatus: 'active' }, message }), false);
 });
 
+test('automatic agents in groups require a mention of the configured instance jid', () => {
+  const message = createMessage({
+    phone: `120363${Date.now()}@g.us`,
+    name: 'Grupo Agente',
+    isGroup: true,
+    direction: 'inbound',
+    type: 'text',
+    body: '@Bot Ola',
+    status: 'received',
+    raw: {
+      mentions: ['5511999999999@s.whatsapp.net']
+    }
+  });
+  const session = getSupportSessionByIdForTest(message.sessionId);
+  const settings = { automaticAttendance: true, instanceJid: '5511999999999@s.whatsapp.net' };
+
+  assert.equal(shouldRunAutomaticAgent({ settings, session, message: { ...message, mentions: [] } }), false);
+  assert.equal(shouldRunAutomaticAgent({ settings: { automaticAttendance: true }, session, message }), false);
+  assert.equal(shouldRunAutomaticAgent({ settings, session, message }), true);
+});
+
 test('agent decisions are parsed from Gemini JSON responses', () => {
   assert.deepEqual(parseAgentDecision('{"action":"reply","message":"Oi"}'), {
     action: 'reply',

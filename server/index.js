@@ -122,9 +122,6 @@ app.patch('/api/auth/me/preferences', (req, res) => {
   if (Object.prototype.hasOwnProperty.call(req.body || {}, 'themeColor')) {
     changes.themeColor = req.body.themeColor;
   }
-  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'sendNameHeader')) {
-    changes.sendNameHeader = req.body.sendNameHeader;
-  }
   const user = Object.keys(changes).length === 1 && Object.prototype.hasOwnProperty.call(changes, 'themeColor')
     ? updateUserThemeColor(req.user.id, changes.themeColor)
     : updateUser(req.user.id, changes);

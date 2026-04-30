@@ -5,7 +5,7 @@ import { formatInvoiceAmount, formatInvoiceDate, normalizeInvoice } from '../sha
 import { Button, Card, Input, Switch } from '../components/ui/index.js';
 
 export function SettingsPanel({ settings, setSettings, currentUser, onError, showToast }) {
-  const [form, setForm] = useState({ baseUrl: '', instanceId: '', token: '', webhookPublicUrl: '', ignoreGroups: false, automaticAttendance: false, geminiApiKey: '' });
+  const [form, setForm] = useState({ baseUrl: '', instanceId: '', instanceJid: '', token: '', webhookPublicUrl: '', ignoreGroups: false, automaticAttendance: false, geminiApiKey: '' });
   const [saving, setSaving] = useState(false);
   const [invoicePayload, setInvoicePayload] = useState(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
@@ -16,6 +16,7 @@ export function SettingsPanel({ settings, setSettings, currentUser, onError, sho
     setForm({
       baseUrl: settings?.baseUrl || 'https://api.w-api.app',
       instanceId: settings?.instanceId || '',
+      instanceJid: settings?.instanceJid || '',
       token: '',
       webhookPublicUrl: settings?.webhookPublicUrl || '',
       ignoreGroups: Boolean(settings?.ignoreGroups),
@@ -77,6 +78,7 @@ export function SettingsPanel({ settings, setSettings, currentUser, onError, sho
         <form className="stacked-form form-grid" onSubmit={submit}>
           <Input label="Base URL" value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} />
           <Input label="Instance ID" value={form.instanceId} onChange={(event) => setForm({ ...form, instanceId: event.target.value })} />
+          <Input label="JID ou numero do bot" help="Usado para liberar respostas automaticas quando o bot for marcado em grupos." value={form.instanceJid} onChange={(event) => setForm({ ...form, instanceJid: event.target.value })} placeholder="5511999999999@s.whatsapp.net" />
           <Input label="Token" value={form.token} onChange={(event) => setForm({ ...form, token: event.target.value })} placeholder={settings?.hasToken ? 'Token ja configurado' : 'Bearer token da instancia'} type="password" />
           <Input label="URL publica webhook" value={form.webhookPublicUrl} onChange={(event) => setForm({ ...form, webhookPublicUrl: event.target.value })} placeholder="https://seu-tunel.app" />
           <Input label="Chave Gemini" value={form.geminiApiKey} onChange={(event) => setForm({ ...form, geminiApiKey: event.target.value })} placeholder={settings?.hasGeminiApiKey ? 'Chave ja configurada' : 'API key do Gemini'} type="password" />
