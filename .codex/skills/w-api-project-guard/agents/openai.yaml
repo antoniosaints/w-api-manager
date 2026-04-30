@@ -1,0 +1,4 @@
+interface:
+  display_name: "W-API Project Guard"
+  short_description: "Mantem padrao fullstack e UI/UX do W-API"
+  default_prompt: "Use $w-api-project-guard ao criar, corrigir ou revisar mudancas no W-API Atendimento."

@@ -1,0 +1,6 @@
+{"type":"server-started","port":52335,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:52335","screen_dir":"C:\\Users\\Usuario\\Desktop\\Projetos\\Whatsapp\\W-api\\.superpowers\\brainstorm\\19248-1777375334\\content","state_dir":"C:\\Users\\Usuario\\Desktop\\Projetos\\Whatsapp\\W-api\\.superpowers\\brainstorm\\19248-1777375334\\state"}
+{"type":"screen-added","file":"C:\\Users\\Usuario\\Desktop\\Projetos\\Whatsapp\\W-api\\.superpowers\\brainstorm\\19248-1777375334\\content\\visual-style.html"}
+{"type":"screen-added","file":"C:\\Users\\Usuario\\Desktop\\Projetos\\Whatsapp\\W-api\\.superpowers\\brainstorm\\19248-1777375334\\content\\waiting.html"}
+{"type":"screen-added","file":"C:\\Users\\Usuario\\Desktop\\Projetos\\Whatsapp\\W-api\\.superpowers\\brainstorm\\19248-1777375334\\content\\nav-layout.html"}
+{"source":"user-event","type":"click","text":"B. Sidebar console\n      Mais cara de ferramenta profissional, libera o topo para status/acoes e escala melhor.","choice":"sidebar-console","id":null,"timestamp":1777375669298}
+{"type":"server-stopped","reason":"idle timeout"}

@@ -1,0 +1,103 @@
+<h2>Qual direcao visual parece mais profissional para o W-API Atendimento?</h2>
+<p class="subtitle">Clique em uma opcao no browser se quiser. Todas incluem tema claro e escuro; a diferenca e o tom do produto.</p>
+
+<style>
+  .style-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:18px; }
+  .style-card { border:1px solid #d7dee6; border-radius:10px; overflow:hidden; background:#fff; cursor:pointer; transition:.16s ease; }
+  .style-card:hover, .style-card.selected { border-color:#227653; box-shadow:0 14px 38px rgba(18, 37, 31, .14); transform:translateY(-1px); }
+  .style-head { padding:14px 16px; border-bottom:1px solid #e3e8ee; display:flex; justify-content:space-between; align-items:center; }
+  .style-head strong { color:#16221d; }
+  .style-head span { font-size:12px; color:#687681; }
+  .theme-pair { display:grid; grid-template-columns:1fr 1fr; min-height:240px; }
+  .mini { padding:12px; display:grid; grid-template-rows:auto 1fr auto; gap:10px; }
+  .mini.light { background:#f7f8f6; color:#17221d; }
+  .mini.dark { background:#101418; color:#edf2ef; }
+  .mini.alt-light { background:#f3f6fb; }
+  .mini.alt-dark { background:#121722; }
+  .mini.wa-light { background:#f1f7f3; }
+  .mini.wa-dark { background:#0d1b16; }
+  .bar { height:30px; border-radius:7px; display:flex; align-items:center; gap:6px; padding:0 8px; font-size:11px; font-weight:700; }
+  .light .bar { background:#fff; border:1px solid #dfe6df; }
+  .dark .bar { background:#1b2229; border:1px solid #2d3742; }
+  .dot { width:8px; height:8px; border-radius:99px; background:#238357; }
+  .rows { display:grid; gap:7px; }
+  .row { height:24px; border-radius:6px; opacity:.95; }
+  .light .row { background:#fff; border:1px solid #e2e8e2; }
+  .dark .row { background:#1a2329; border:1px solid #2a353d; }
+  .chat { align-self:end; display:grid; gap:6px; }
+  .bubble-mini { height:25px; border-radius:8px; }
+  .light .bubble-mini.in { background:#fff; border:1px solid #dfe6df; }
+  .light .bubble-mini.out { background:#dff4e8; }
+  .dark .bubble-mini.in { background:#202a31; }
+  .dark .bubble-mini.out { background:#184b38; }
+  .premium .dot, .premium .bubble-mini.out { background:#2563a7; }
+  .premium .light .bubble-mini.out { background:#dcecff; }
+  .wa .dot, .wa .bubble-mini.out { background:#128c5a; }
+  .wa .light .bubble-mini.out { background:#dcf8c6; }
+  .card-body { padding:14px 16px 16px; }
+  .card-body h3 { margin:0 0 7px; }
+  .card-body p { margin:0; color:#61707b; line-height:1.45; }
+  @media (max-width: 980px) { .style-grid { grid-template-columns:1fr; } }
+</style>
+
+<div class="style-grid">
+  <div class="style-card" data-choice="operacional" onclick="toggleSelect(this)">
+    <div class="style-head"><strong>A. Operacional limpo</strong><span>recomendado</span></div>
+    <div class="theme-pair">
+      <div class="mini light">
+        <div class="bar"><span class="dot"></span> Atendimento</div>
+        <div class="rows"><div class="row"></div><div class="row"></div><div class="row"></div></div>
+        <div class="chat"><div class="bubble-mini in"></div><div class="bubble-mini out"></div></div>
+      </div>
+      <div class="mini dark">
+        <div class="bar"><span class="dot"></span> Atendimento</div>
+        <div class="rows"><div class="row"></div><div class="row"></div><div class="row"></div></div>
+        <div class="chat"><div class="bubble-mini in"></div><div class="bubble-mini out"></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Foco em suporte diario</h3>
+      <p>Interface densa, clara, com pouca decoracao, boa leitura e estados fortes para operacao real.</p>
+    </div>
+  </div>
+
+  <div class="style-card premium" data-choice="crm-premium" onclick="toggleSelect(this)">
+    <div class="style-head"><strong>B. CRM premium</strong><span>mais corporativo</span></div>
+    <div class="theme-pair">
+      <div class="mini light alt-light">
+        <div class="bar"><span class="dot"></span> Pipeline</div>
+        <div class="rows"><div class="row"></div><div class="row"></div><div class="row"></div></div>
+        <div class="chat"><div class="bubble-mini in"></div><div class="bubble-mini out"></div></div>
+      </div>
+      <div class="mini dark alt-dark">
+        <div class="bar"><span class="dot"></span> Pipeline</div>
+        <div class="rows"><div class="row"></div><div class="row"></div><div class="row"></div></div>
+        <div class="chat"><div class="bubble-mini in"></div><div class="bubble-mini out"></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Mais SaaS e executivo</h3>
+      <p>Visual frio, refinado e analitico. Bom para parecer plataforma de gestao, menos “WhatsApp”.</p>
+    </div>
+  </div>
+
+  <div class="style-card wa" data-choice="whatsapp-business" onclick="toggleSelect(this)">
+    <div class="style-head"><strong>C. WhatsApp Business</strong><span>mais familiar</span></div>
+    <div class="theme-pair">
+      <div class="mini light wa-light">
+        <div class="bar"><span class="dot"></span> Conversas</div>
+        <div class="rows"><div class="row"></div><div class="row"></div><div class="row"></div></div>
+        <div class="chat"><div class="bubble-mini in"></div><div class="bubble-mini out"></div></div>
+      </div>
+      <div class="mini dark wa-dark">
+        <div class="bar"><span class="dot"></span> Conversas</div>
+        <div class="rows"><div class="row"></div><div class="row"></div><div class="row"></div></div>
+        <div class="chat"><div class="bubble-mini in"></div><div class="bubble-mini out"></div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Proximo ao mensageiro</h3>
+      <p>Mais verde e familiar, com bolhas mais reconheciveis. Otimo para onboarding, menos neutro.</p>
+    </div>
+  </div>
+</div>

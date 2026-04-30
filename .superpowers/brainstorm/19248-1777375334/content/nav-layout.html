@@ -1,0 +1,58 @@
+<h2>Qual estrutura de navegacao combina melhor com o app?</h2>
+<p class="subtitle">Ambas mantem o foco desktop de atendimento e continuam responsivas no mobile.</p>
+
+<style>
+  .layout-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .layout-card { border:1px solid #d7dee6; border-radius:10px; overflow:hidden; background:#fff; cursor:pointer; transition:.16s ease; }
+  .layout-card:hover, .layout-card.selected { border-color:#227653; box-shadow:0 14px 38px rgba(18,37,31,.14); transform:translateY(-1px); }
+  .mock-screen { height:310px; background:#f5f7f8; padding:12px; display:grid; gap:10px; }
+  .top-shell { grid-template-rows:42px 1fr; }
+  .side-shell { grid-template-columns:78px 1fr; }
+  .topbar-mini, .sidebar-mini, .panel-mini, .list-mini, .chat-mini, .toolbar-mini { border:1px solid #dfe5ea; background:#fff; border-radius:8px; }
+  .topbar-mini { display:flex; align-items:center; justify-content:space-between; padding:0 12px; }
+  .pill-mini { width:72px; height:18px; border-radius:99px; background:#e9f4ee; }
+  .top-main { display:grid; grid-template-columns:34% 1fr; gap:10px; min-height:0; }
+  .sidebar-mini { display:grid; align-content:start; gap:9px; padding:12px; }
+  .nav-dot { width:36px; height:32px; border-radius:8px; background:#eef2f0; }
+  .nav-dot.active { background:#d9efe4; }
+  .panel-mini { padding:10px; display:grid; gap:8px; align-content:start; }
+  .item-mini { height:28px; border-radius:7px; background:#f0f3f5; }
+  .chat-mini { display:grid; grid-template-rows:34px 1fr 38px; gap:8px; padding:10px; }
+  .toolbar-mini { background:#f8faf9; }
+  .bubble-line { height:25px; width:70%; border-radius:8px; background:#fff; border:1px solid #dfe5ea; }
+  .bubble-line.out { justify-self:end; background:#dff4e8; width:62%; border:0; }
+  .body-copy { padding:14px 16px 16px; }
+  .body-copy h3 { margin:0 0 7px; }
+  .body-copy p { margin:0; color:#61707b; line-height:1.45; }
+  @media (max-width: 900px) { .layout-grid { grid-template-columns:1fr; } }
+</style>
+
+<div class="layout-grid">
+  <div class="layout-card" data-choice="topbar-refined" onclick="toggleSelect(this)">
+    <div class="mock-screen top-shell">
+      <div class="topbar-mini"><strong>W-API</strong><span class="pill-mini"></span></div>
+      <div class="top-main">
+        <div class="panel-mini"><div class="item-mini"></div><div class="item-mini"></div><div class="item-mini"></div><div class="item-mini"></div></div>
+        <div class="chat-mini"><div class="toolbar-mini"></div><div class="bubble-line"></div><div class="bubble-line out"></div></div>
+      </div>
+    </div>
+    <div class="body-copy">
+      <h3>A. Topbar refinada</h3>
+      <p>Mantem a estrutura atual, reduz risco e melhora o visual. Boa para poucos modulos.</p>
+    </div>
+  </div>
+
+  <div class="layout-card" data-choice="sidebar-console" onclick="toggleSelect(this)">
+    <div class="mock-screen side-shell">
+      <div class="sidebar-mini"><div class="nav-dot active"></div><div class="nav-dot"></div><div class="nav-dot"></div><div class="nav-dot"></div></div>
+      <div class="top-main">
+        <div class="panel-mini"><div class="item-mini"></div><div class="item-mini"></div><div class="item-mini"></div><div class="item-mini"></div></div>
+        <div class="chat-mini"><div class="toolbar-mini"></div><div class="bubble-line"></div><div class="bubble-line out"></div></div>
+      </div>
+    </div>
+    <div class="body-copy">
+      <h3>B. Sidebar console</h3>
+      <p>Mais cara de ferramenta profissional, libera o topo para status/acoes e escala melhor.</p>
+    </div>
+  </div>
+</div>
