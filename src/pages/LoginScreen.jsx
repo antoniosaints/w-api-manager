@@ -3,8 +3,8 @@ import { Loader2, PlugZap, UserCheck } from 'lucide-react';
 import { Button, Card, Input } from '../components/ui/index.js';
 
 export function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState('admin@wapi.local');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 

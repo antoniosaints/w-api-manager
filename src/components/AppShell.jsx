@@ -8,9 +8,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Palette,
-  PlugZap,
   Sun,
-  UserCheck
+  UserCheck,
+  LucideMessageCircleDashed
 } from 'lucide-react';
 import { navItems, pageMeta } from '../app/navigation.jsx';
 import { Button } from './ui/index.js';
@@ -29,9 +29,9 @@ export function Sidebar({ view, setView, settings, currentUser, collapsed, onTog
   return (
     <aside className={collapsed ? 'sidebar collapsed' : 'sidebar'}>
       <div className="brand">
-        <span className="brand-mark"><PlugZap size={24} /></span>
+        <span className="brand-mark"><LucideMessageCircleDashed size={24} /></span>
         <div className="brand-copy">
-          <strong>W-API Atendimento</strong>
+          <strong>Atendimento Online</strong>
           <small>{settings?.instanceId || 'Instancia nao configurada'}</small>
         </div>
         <div className="sidebar-actions">
@@ -61,7 +61,7 @@ export function Sidebar({ view, setView, settings, currentUser, collapsed, onTog
       </TooltipProvider>
 
       <div className="sidebar-footer">
-        <small>Servidor local</small>
+        <small>CAS Internet</small>
         <strong>{settings?.baseUrl || 'W-API nao configurada'}</strong>
       </div>
     </aside>
