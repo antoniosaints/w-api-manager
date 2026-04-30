@@ -100,7 +100,7 @@ export function sendImageMessage({ phone, image, caption = '', messageId, delayM
   });
 }
 
-export function sendAudioMessage({ phone, audio, messageId, delayMessage = 0 }) {
+export function sendAudioMessage({ phone, audio, messageId, delayMessage = 1 }) {
   return requestWapi('/v1/message/send-audio', {
     method: 'POST',
     body: {

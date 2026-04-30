@@ -16,6 +16,70 @@ test('finds message image source from local outbound uploads path', () => {
   );
 });
 
+test('keeps outbound local image preview even after encrypted W-API webhook metadata arrives', () => {
+  assert.equal(
+    findMessageImageSource({
+      id: 'outbound-image-1',
+      direction: 'outbound',
+      type: 'image',
+      mediaPath: '/uploads/outbound/local-image.jpg',
+      raw: {
+        msgContent: {
+          imageMessage: {
+            url: 'https://mmg.whatsapp.net/v/t62/image.enc',
+            mimetype: 'image/jpeg',
+            mediaKey: 'abc123'
+          }
+        }
+      }
+    }),
+    '/uploads/outbound/local-image.jpg'
+  );
+});
+
+test('uses local media endpoint for nested W-API delivery image payloads', () => {
+  assert.equal(
+    findMessageImageSource({
+      id: 'delivery-image-1',
+      direction: 'outbound',
+      type: 'image',
+      mediaPath: 'https://mmg.whatsapp.net/o1/v/t24/image.enc',
+      raw: {
+        msgContent: {
+          message: {
+            imageMessage: {
+              url: 'https://mmg.whatsapp.net/o1/v/t24/image.enc',
+              mimetype: 'image/jpeg',
+              mediaKey: 'delivery-key'
+            }
+          }
+        }
+      }
+    }),
+    '/api/messages/delivery-image-1/media'
+  );
+});
+
+test('uses local media endpoint for normalized encrypted image metadata', () => {
+  assert.equal(
+    findMessageImageSource({
+      id: 'normalized-image-1',
+      direction: 'outbound',
+      type: 'image',
+      mediaPath: 'https://mmg.whatsapp.net/o1/v/t24/image.enc',
+      raw: {
+        normalizedMedia: {
+          type: 'image',
+          url: 'https://mmg.whatsapp.net/o1/v/t24/image.enc',
+          mimetype: 'image/jpeg',
+          mediaKey: 'normalized-key'
+        }
+      }
+    }),
+    '/api/messages/normalized-image-1/media'
+  );
+});
+
 test('finds message image source from raw W-API image payload', () => {
   assert.equal(
     findMessageImageSource({

@@ -31,6 +31,7 @@ export function MessageBubble({ message, onOpenMedia, onReply, canReply = false,
   const hasText = Boolean(message.body && !isPlaceholderBody(message.body));
   const isSticker = media?.type === 'sticker' || isStickerMessage(message);
   const mediaLabel = getMessageMediaLabel(message, media);
+  const shouldRenderMediaCaption = Boolean(media && media?.type !== 'audio' && !hasText);
   const imageAlt = hasText ? message.body : mediaLabel;
   const senderLabel = showSenderName && message.direction === 'inbound' && (message.senderName || message.senderPhone)
     ? message.senderName || message.senderPhone
@@ -57,10 +58,6 @@ export function MessageBubble({ message, onOpenMedia, onReply, canReply = false,
       )}
       {media?.type === 'audio' && (
         <div className="message-audio">
-          <div className="message-media-heading">
-            <AudioLines size={17} />
-            <span>{media.fileName || 'Audio'}</span>
-          </div>
           <WaveformAudioPlayer media={media} message={message} />
           <MediaMeta media={media} />
         </div>
@@ -84,7 +81,7 @@ export function MessageBubble({ message, onOpenMedia, onReply, canReply = false,
         </a>
       )}
       {hasText && <p>{message.body}</p>}
-      {!hasText && media && (
+      {shouldRenderMediaCaption && (
         <p className="media-caption">
           <MediaLabelIcon type={media.type} size={15} />
           {mediaLabel}

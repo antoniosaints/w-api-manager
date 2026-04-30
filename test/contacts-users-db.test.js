@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from '../server/db.js';
 import {
   createMessage,
+  cleanupWebhookStatusArtifacts,
   createSupportSessionEventForTest,
   createAiAgent,
   createSector,
@@ -182,11 +183,146 @@ test('outbound media webhook updates the sent message with official media metada
   const raw = JSON.parse(row.raw_json);
 
   assert.equal(updated.id, sent.id);
-  assert.equal(row.media_path, 'https://mmg.whatsapp.net/v/t62.7118-24/image.enc');
+  assert.equal(row.media_path, '/uploads/outbound/local-image.jpg');
   assert.equal(row.status, 'delivered');
   assert.equal(raw.event, 'webhookDelivery');
+  assert.equal(raw.normalizedMedia.url, 'https://mmg.whatsapp.net/v/t62.7118-24/image.enc');
   assert.equal(raw.normalizedMedia.mediaKey, 'abc123');
   assert.equal(raw.normalizedMedia.directPath, '/v/t62.7118-24/image.enc?ccb=11-4&oh=token');
+});
+
+test('message status webhooks do not create visible chat messages without an existing message', () => {
+  const phone = `5512${Date.now()}`;
+  const externalId = `status-only-${Date.now()}`;
+  const stored = createMessage({
+    phone,
+    name: 'Status Fantasma',
+    direction: 'outbound',
+    type: 'message-status',
+    body: '[message-status]',
+    status: 'SERVER',
+    externalId,
+    raw: {
+      event: 'webhookStatus',
+      messageId: externalId,
+      status: 'SERVER',
+      fromMe: true,
+      chat: { id: `${phone}@lid` }
+    }
+  });
+  const messages = db.prepare('SELECT COUNT(*) AS total FROM messages WHERE external_id = ?').get(externalId);
+  const sessions = db.prepare('SELECT COUNT(*) AS total FROM support_sessions WHERE phone = ?').get(phone);
+
+  assert.equal(stored, null);
+  assert.equal(messages.total, 0);
+  assert.equal(sessions.total, 0);
+});
+
+test('message status webhooks update status without replacing outbound image content', () => {
+  const phone = `5513${Date.now()}`;
+  const externalId = `image-status-${Date.now()}`;
+  const sent = createMessage({
+    phone,
+    name: 'Cliente Status',
+    direction: 'outbound',
+    type: 'image',
+    body: 'Imagem enviada',
+    status: 'sent',
+    externalId,
+    mediaPath: '/uploads/outbound/status-image.jpg',
+    media: {
+      type: 'image',
+      url: '/uploads/outbound/status-image.jpg',
+      mimetype: 'image/jpeg',
+      fileName: 'status-image.jpg',
+      size: 123
+    },
+    raw: {
+      messageId: externalId,
+      normalizedMedia: {
+        type: 'image',
+        url: '/uploads/outbound/status-image.jpg',
+        mimetype: 'image/jpeg'
+      }
+    }
+  });
+
+  const updated = createMessage({
+    phone: `${phone}@lid`,
+    name: 'Cliente Status',
+    direction: 'outbound',
+    type: 'message-status',
+    body: '[message-status]',
+    status: 'DELIVERY',
+    externalId,
+    raw: {
+      event: 'webhookStatus',
+      messageId: externalId,
+      status: 'DELIVERY',
+      fromMe: true,
+      chat: { id: `${phone}@lid` }
+    }
+  });
+  const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(sent.id);
+
+  assert.equal(updated.id, sent.id);
+  assert.equal(row.type, 'image');
+  assert.equal(row.body, 'Imagem enviada');
+  assert.equal(row.media_path, '/uploads/outbound/status-image.jpg');
+  assert.equal(row.status, 'DELIVERY');
+});
+
+test('cleanup removes orphan status-only webhook artifacts from existing databases', () => {
+  const phone = `5514${Date.now()}`;
+  const contactId = randomUUID();
+  const sessionId = randomUUID();
+  const messageId = randomUUID();
+  const timestamp = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO contacts (id, phone, name, is_group, chat_status, unread_count, created_at, updated_at)
+    VALUES (?, ?, ?, 0, 'active', 0, ?, ?)
+  `).run(contactId, phone, 'Contato Status', timestamp, timestamp);
+  db.prepare(`
+    INSERT INTO support_sessions (id, contact_id, phone, is_group, status, unread_count, started_at, last_message_at, created_at, updated_at)
+    VALUES (?, ?, ?, 0, 'active', 0, ?, ?, ?, ?)
+  `).run(sessionId, contactId, phone, timestamp, timestamp, timestamp, timestamp);
+  db.prepare(`
+    INSERT INTO messages (id, external_id, contact_id, session_id, phone, direction, type, body, status, raw_json, created_at)
+    VALUES (?, ?, ?, ?, ?, 'outbound', 'message-status', '[message-status]', 'SERVER', ?, ?)
+  `).run(messageId, `cleanup-${Date.now()}`, contactId, sessionId, phone, JSON.stringify({ event: 'webhookStatus' }), timestamp);
+
+  const removed = cleanupWebhookStatusArtifacts();
+  const messages = db.prepare('SELECT COUNT(*) AS total FROM messages WHERE id = ?').get(messageId);
+  const sessions = db.prepare('SELECT COUNT(*) AS total FROM support_sessions WHERE id = ?').get(sessionId);
+  const contact = getContactByPhone(phone);
+
+  assert.equal(removed.messages, 1);
+  assert.equal(messages.total, 0);
+  assert.equal(sessions.total, 0);
+  assert.equal(contact.chatStatus, 'waiting');
+});
+
+test('cleanup removes empty support sessions left by status-only artifacts', () => {
+  const phone = `5515${Date.now()}`;
+  const contactId = randomUUID();
+  const sessionId = randomUUID();
+  const timestamp = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO contacts (id, phone, name, is_group, chat_status, unread_count, created_at, updated_at)
+    VALUES (?, ?, ?, 0, 'active', 0, ?, ?)
+  `).run(contactId, phone, 'Contato Vazio', timestamp, timestamp);
+  db.prepare(`
+    INSERT INTO support_sessions (id, contact_id, phone, is_group, status, unread_count, started_at, last_message_at, created_at, updated_at)
+    VALUES (?, ?, ?, 0, 'waiting', 0, ?, ?, ?, ?)
+  `).run(sessionId, contactId, phone, timestamp, timestamp, timestamp, timestamp);
+
+  const removed = cleanupWebhookStatusArtifacts();
+  const sessions = db.prepare('SELECT COUNT(*) AS total FROM support_sessions WHERE id = ?').get(sessionId);
+
+  assert.equal(removed.emptySessions, 1);
+  assert.equal(sessions.total, 0);
 });
 
 test('near-duplicate inbound video webhook echoes are stored once', () => {

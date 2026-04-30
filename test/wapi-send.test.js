@@ -93,7 +93,7 @@ test('send audio uses W-API audio endpoint and payload', async () => {
       phone: '559999999999',
       audio: 'data:audio/ogg;base64,abc123',
       messageId: 'quoted-audio',
-      delayMessage: 0
+      delayMessage: 1
     });
   } finally {
     global.fetch = originalFetch;

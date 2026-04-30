@@ -33,7 +33,7 @@ export function shouldRunAutomaticAgent({ settings, session, message }) {
   if (status !== 'waiting') return false;
   if (session.assignedUserId || session.assigned_user_id) return false;
   if (session.isGroup || session.is_group || message.isGroup || message.is_group) {
-    return isConfiguredInstanceMentioned(settings, message);
+    return isConfiguredInstanceReferenced(settings, message);
   }
   return true;
 }
@@ -164,9 +164,13 @@ export async function runAutomaticAgentForMessage(message, options = {}) {
   return { agent, reply, transferred, decision: finalDecision };
 }
 
-function isConfiguredInstanceMentioned(settings = {}, message = {}) {
+function isConfiguredInstanceReferenced(settings = {}, message = {}) {
   const identity = normalizeMentionIdentity(settings.instanceJid || settings.instancePhone || settings.botJid || '');
   if (!identity) return false;
+  return isConfiguredInstanceMentioned(identity, message) || isConfiguredInstanceQuoted(identity, message);
+}
+
+function isConfiguredInstanceMentioned(identity, message = {}) {
   const sourceMentions = Array.isArray(message.mentions)
     ? message.mentions
     : Array.isArray(message.raw?.normalizedMentions)
@@ -176,6 +180,36 @@ function isConfiguredInstanceMentioned(settings = {}, message = {}) {
         : [];
   const mentions = sourceMentions.map(normalizeMentionIdentity).filter(Boolean);
   return mentions.includes(identity);
+}
+
+function isConfiguredInstanceQuoted(identity, message = {}) {
+  const participants = [
+    message.replyParticipant,
+    message.raw?.normalizedReplyParticipant,
+    ...extractQuotedParticipants(message.raw)
+  ].map(normalizeMentionIdentity).filter(Boolean);
+  return participants.includes(identity);
+}
+
+function extractQuotedParticipants(raw) {
+  if (!raw || typeof raw !== 'object') return [];
+  const content = raw.msgContent || raw.message || raw;
+  const contexts = [
+    content.extendedTextMessage?.contextInfo,
+    content.imageMessage?.contextInfo,
+    content.videoMessage?.contextInfo,
+    content.stickerMessage?.contextInfo,
+    content.documentMessage?.contextInfo,
+    content.audioMessage?.contextInfo,
+    content.contextInfo,
+    raw.contextInfo,
+    raw.messageContextInfo
+  ].filter(Boolean);
+  return contexts.flatMap((context) => [
+    context.participant,
+    context.participantJid,
+    context.key?.participant
+  ]);
 }
 
 function normalizeMentionIdentity(value) {

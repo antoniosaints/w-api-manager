@@ -43,6 +43,7 @@ export function normalizeIncomingMessage(payload, fallbackEvent = 'received') {
     media,
     mentions,
     replyToExternalId: extractReplyExternalId(replyContext),
+    replyParticipant: extractReplyParticipant(replyContext),
     replyPreview: extractQuotedPreview(replyContext),
     createdAt: timestamp,
     raw
@@ -246,6 +247,11 @@ function findReplyContext(source) {
 function extractReplyExternalId(context) {
   if (!context) return '';
   return context.stanzaId || context.quotedMessageId || context.messageId || context.key?.id || '';
+}
+
+function extractReplyParticipant(context) {
+  if (!context) return '';
+  return String(context.participant || context.key?.participant || context.participantJid || '').replace(/\s/g, '').trim();
 }
 
 function extractQuotedPreview(context) {

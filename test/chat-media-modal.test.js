@@ -46,3 +46,11 @@ test('audio messages render with WaveSurfer instead of the native audio control'
   assert.match(messageBubbleSource, /className="message-audio-waveform"/);
   assert.doesNotMatch(messageBubbleSource, /<audio\s+controls/);
 });
+
+test('audio bubbles stay compact without media heading or automatic caption', () => {
+  assert.doesNotMatch(messageBubbleSource, /media\?\.type === 'audio'[\s\S]*message-media-heading/);
+  assert.match(messageBubbleSource, /shouldRenderMediaCaption/);
+  assert.match(messageBubbleSource, /media\?\.type !== 'audio'/);
+  assert.match(stylesSource, /\.bubble\.media-audio[\s\S]*width:\s*min\(360px,\s*58%\)/);
+  assert.match(stylesSource, /\.message-audio[\s\S]*gap:\s*0/);
+});

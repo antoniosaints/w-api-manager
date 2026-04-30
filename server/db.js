@@ -269,6 +269,7 @@ const insertSessionStmt = db.prepare(`
 
 migrateLegacySessions();
 normalizeLegacyGroupChatIds();
+cleanupWebhookStatusArtifacts();
 ensureDefaultAdminUser();
 
 export function getSettings() {
@@ -321,6 +322,63 @@ function ensureDefaultAdminUser() {
     role: 'admin',
     active: true
   });
+}
+
+export function cleanupWebhookStatusArtifacts() {
+  const artifacts = db.prepare(`
+    SELECT id, session_id, phone
+    FROM messages
+    WHERE type = 'message-status'
+      AND body = '[message-status]'
+      AND raw_json LIKE '%"event":"webhookStatus"%'
+  `).all();
+  const sessions = [...new Set(artifacts.map((item) => item.session_id).filter(Boolean))];
+  const phones = [...new Set(artifacts.map((item) => item.phone).filter(Boolean))];
+  let removedSessions = 0;
+  let removedEmptySessions = 0;
+
+  const tx = db.transaction(() => {
+    if (artifacts.length) {
+      db.prepare(`
+        DELETE FROM messages
+        WHERE type = 'message-status'
+          AND body = '[message-status]'
+          AND raw_json LIKE '%"event":"webhookStatus"%'
+      `).run();
+
+      for (const sessionId of sessions) {
+        const remainingMessages = db.prepare('SELECT COUNT(*) AS total FROM messages WHERE session_id = ?').get(sessionId).total;
+        const remainingEvents = db.prepare('SELECT COUNT(*) AS total FROM support_session_events WHERE session_id = ?').get(sessionId).total;
+        const remainingTags = db.prepare('SELECT COUNT(*) AS total FROM support_session_tags WHERE session_id = ?').get(sessionId).total;
+        if (remainingMessages === 0 && remainingEvents === 0 && remainingTags === 0) {
+          db.prepare('DELETE FROM support_sessions WHERE id = ?').run(sessionId);
+          removedSessions += 1;
+        }
+      }
+    }
+
+    const emptySessions = db.prepare(`
+      SELECT s.id, s.phone
+      FROM support_sessions s
+      WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM support_session_events e WHERE e.session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM support_session_tags t WHERE t.session_id = s.id)
+    `).all();
+    for (const session of emptySessions) {
+      if (!sessions.includes(session.id)) {
+        db.prepare('DELETE FROM support_sessions WHERE id = ?').run(session.id);
+        removedEmptySessions += 1;
+        if (session.phone) phones.push(session.phone);
+      }
+    }
+  });
+  tx();
+
+  for (const phone of phones) {
+    syncContactFromLatestSession(phone);
+  }
+
+  return { messages: artifacts.length, sessions: removedSessions, emptySessions: removedEmptySessions };
 }
 
 export function createUser({ name, email, password, role = 'attendant', active = true, themeColor = 'green', sendNameHeader = false, sectorIds = [] }) {
@@ -919,6 +977,7 @@ export function createMessage(message) {
     const existing = db.prepare('SELECT * FROM messages WHERE external_id = ?').get(message.externalId);
     if (existing) return mergeExistingMessage(existing, message);
   }
+  if (isWebhookStatusOnlyMessage(message)) return null;
 
   const contact = upsertContact({
     phone: message.phone,
@@ -989,9 +1048,13 @@ function mergeExistingMessage(existing, message = {}) {
   const existingRaw = safeJson(existing.raw_json);
   const nextRaw = normalizeMessageRaw(message);
   const mergedRaw = mergeMessageRaw(existingRaw, nextRaw);
-  const mediaPath = message.mediaPath || extractMediaPathFromRaw(nextRaw) || existing.media_path || null;
-  const body = shouldReplaceMessageBody(existing.body, message.body) ? message.body : existing.body;
-  const type = message.type || existing.type;
+  const statusOnly = isWebhookStatusOnlyMessage(message);
+  const nextMediaPath = statusOnly ? null : message.mediaPath || extractMediaPathFromRaw(nextRaw) || null;
+  const mediaPath = statusOnly ? existing.media_path : shouldKeepExistingRenderableMediaPath(existing, nextMediaPath)
+    ? existing.media_path
+    : nextMediaPath || existing.media_path || null;
+  const body = !statusOnly && shouldReplaceMessageBody(existing.body, message.body) ? message.body : existing.body;
+  const type = statusOnly ? existing.type : message.type || existing.type;
   const status = message.status || existing.status;
 
   db.prepare(`
@@ -1028,6 +1091,9 @@ function normalizeMessageRaw(message) {
   const raw = message.raw && typeof message.raw === 'object' ? { ...message.raw } : {};
   if (Array.isArray(message.mentions)) {
     raw.normalizedMentions = message.mentions;
+  }
+  if (message.replyParticipant) {
+    raw.normalizedReplyParticipant = message.replyParticipant;
   }
   if (message.media && typeof message.media === 'object') {
     raw.normalizedMedia = {
@@ -1068,6 +1134,28 @@ function extractMediaPathFromRaw(raw) {
   ].filter(Boolean);
   const found = candidates.find((item) => item && typeof item === 'object' && (item.url || item.mediaUrl || item.link));
   return found?.url || found?.mediaUrl || found?.link || '';
+}
+
+function shouldKeepExistingRenderableMediaPath(existing = {}, nextMediaPath = '') {
+  if (existing.direction !== 'outbound') return false;
+  if (!['image', 'sticker'].includes(existing.type)) return false;
+  if (!isLocalUploadPath(existing.media_path)) return false;
+  if (!nextMediaPath || isLocalUploadPath(nextMediaPath)) return false;
+  return isWhatsAppMediaUrl(nextMediaPath);
+}
+
+function isWebhookStatusOnlyMessage(message = {}) {
+  const type = String(message.type || '').trim().toLowerCase();
+  const event = String(message.raw?.event || '').trim().toLowerCase();
+  return type === 'message-status' || event === 'webhookstatus';
+}
+
+function isLocalUploadPath(value) {
+  return typeof value === 'string' && value.startsWith('/uploads/');
+}
+
+function isWhatsAppMediaUrl(value) {
+  return typeof value === 'string' && value.includes('mmg.whatsapp.net');
 }
 
 function shouldReplaceMessageBody(current, incoming) {
@@ -1922,8 +2010,25 @@ function mapMessage(row) {
     replyPreview: row.reply_preview,
     raw,
     mentions: Array.isArray(raw.normalizedMentions) ? raw.normalizedMentions : Array.isArray(raw.mentions) ? raw.mentions : [],
+    replyParticipant: raw.normalizedReplyParticipant || extractReplyParticipant(raw),
     createdAt: row.created_at
   };
+}
+
+function extractReplyParticipant(raw) {
+  const content = raw?.msgContent || raw?.message || raw;
+  const contexts = [
+    content?.extendedTextMessage?.contextInfo,
+    content?.imageMessage?.contextInfo,
+    content?.videoMessage?.contextInfo,
+    content?.stickerMessage?.contextInfo,
+    content?.documentMessage?.contextInfo,
+    content?.contextInfo,
+    raw?.contextInfo
+  ].filter(Boolean);
+  return contexts
+    .map((context) => String(context?.participant || context?.key?.participant || context?.participantJid || '').replace(/\s/g, '').trim())
+    .find(Boolean) || '';
 }
 
 function mapSessionEvent(row) {

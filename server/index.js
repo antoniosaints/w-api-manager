@@ -65,6 +65,7 @@ import {
   updateWebhook
 } from './wapi.js';
 import { downloadAndDecryptWhatsAppMedia } from './media.js';
+import { prepareAudioForWapi } from './outbound-audio.js';
 import { buildMediaRawMetadata, mediaFallbackText, normalizeOutboundMedia } from './outbound-media.js';
 import { applyMessageNameHeader } from './outbound-message.js';
 import { persistOutboundMediaReference } from './outbound-storage.js';
@@ -386,7 +387,8 @@ app.post('/api/messages/send', asyncHandler(async (req, res) => {
   const outboundBody = applyMessageNameHeader(body, req.user);
   const media = resolveOutboundMedia(req.body || {});
   const hasMedia = Boolean(media);
-  const storedMedia = hasMedia ? persistOutboundMediaReference(media) : null;
+  const wapiMedia = hasMedia ? await prepareAudioForWapi(media) : null;
+  const storedMedia = hasMedia ? persistOutboundMediaReference(wapiMedia) : null;
   const replyToMessageId = String(req.body?.replyToMessageId || '').trim() || null;
   const replyToExternalId = String(req.body?.replyToExternalId || '').trim();
   const replyPreview = String(req.body?.replyPreview || '').trim().slice(0, 220) || null;
@@ -396,15 +398,15 @@ app.post('/api/messages/send', asyncHandler(async (req, res) => {
   }
 
   const result = hasMedia
-    ? await sendWapiMediaMessage({ phone, body: outboundBody, media, messageId: replyToExternalId })
+    ? await sendWapiMediaMessage({ phone, body: outboundBody, media: wapiMedia, messageId: replyToExternalId })
     : await sendTextMessage({ phone, message: outboundBody, messageId: replyToExternalId });
-  const mediaRaw = buildMediaRawMetadata(storedMedia || media);
+  const mediaRaw = buildMediaRawMetadata(storedMedia || wapiMedia);
   const message = createMessage({
     phone,
     sessionId: req.body?.sessionId || null,
     direction: 'outbound',
-    type: hasMedia ? media.type : 'text',
-    body: outboundBody || (hasMedia ? mediaFallbackText(media.type) : ''),
+    type: hasMedia ? wapiMedia.type : 'text',
+    body: outboundBody || (hasMedia ? mediaFallbackText(wapiMedia.type) : ''),
     status: 'sent',
     externalId: result?.messageId || result?.id || null,
     mediaPath: storedMedia?.publicPath || null,
@@ -420,7 +422,7 @@ app.post('/api/messages/send', asyncHandler(async (req, res) => {
   });
   if (hasMedia && !message.mediaPath) {
     message.previewMedia = storedMedia?.publicPath || media.reference;
-    if (media.type === 'image') message.previewImage = storedMedia?.publicPath || media.reference;
+    if (wapiMedia.type === 'image') message.previewImage = storedMedia?.publicPath || wapiMedia.reference;
   }
 
   emitState(message);
@@ -464,11 +466,12 @@ app.post('/webhooks/wapi/:event', (req, res) => {
       const normalized = normalizeIncomingMessage(item, eventType);
       if (normalized.phone) {
         const direction = normalized.fromMe || eventType !== 'received' ? 'outbound' : 'inbound';
-        stored.push(createMessage({
+        const message = createMessage({
           ...normalized,
           direction,
           status: resolveWebhookMessageStatus(item, eventType, direction)
-        }));
+        });
+        if (message) stored.push(message);
       }
     }
   }

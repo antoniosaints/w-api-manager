@@ -333,6 +333,38 @@ test('normalizes group mentions from W-API context info', () => {
   assert.deepEqual(message.mentions, ['5511999999999@s.whatsapp.net']);
 });
 
+test('normalizes quoted group messages with participant context', () => {
+  const message = normalizeIncomingMessage({
+    event: 'webhookReceived',
+    isGroup: true,
+    messageId: 'group-quoted-1',
+    chat: {
+      id: '120363324769660152@g.us'
+    },
+    sender: {
+      id: '559984140666',
+      senderLid: '129089637736662@lid',
+      pushName: 'Antonio'
+    },
+    msgContent: {
+      extendedTextMessage: {
+        text: 'teste',
+        contextInfo: {
+          stanzaId: 'KI3V90TFHONQPL6WNQPZ',
+          participant: '173130433691721@lid',
+          quotedMessage: {
+            conversation: 'Mensagem do agente'
+          }
+        }
+      }
+    }
+  });
+
+  assert.equal(message.replyToExternalId, 'KI3V90TFHONQPL6WNQPZ');
+  assert.equal(message.replyParticipant, '173130433691721@lid');
+  assert.equal(message.replyPreview, 'Mensagem do agente');
+});
+
 test('detects group payloads even when W-API wraps the event in data', () => {
   assert.equal(isGroupPayload({
     data: {

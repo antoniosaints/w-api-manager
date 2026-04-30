@@ -52,6 +52,43 @@ test('automatic agents in groups require a mention of the configured instance ji
   assert.equal(shouldRunAutomaticAgent({ settings, session, message }), true);
 });
 
+test('automatic agents in groups also run when replying to the configured instance message', () => {
+  const message = createMessage({
+    phone: `120364${Date.now()}@g.us`,
+    name: 'Grupo Resposta Agente',
+    isGroup: true,
+    direction: 'inbound',
+    type: 'text',
+    body: 'teste',
+    status: 'received',
+    raw: {
+      event: 'webhookReceived',
+      isGroup: true,
+      msgContent: {
+        extendedTextMessage: {
+          text: 'teste',
+          contextInfo: {
+            stanzaId: 'agent-message-1',
+            participant: '173130433691721@lid',
+            quotedMessage: {
+              conversation: 'Mensagem enviada pelo agente'
+            }
+          }
+        }
+      }
+    }
+  });
+  const session = getSupportSessionByIdForTest(message.sessionId);
+  const settings = { automaticAttendance: true, instanceJid: '173130433691721@lid' };
+
+  assert.equal(shouldRunAutomaticAgent({ settings, session, message }), true);
+  assert.equal(shouldRunAutomaticAgent({
+    settings: { automaticAttendance: true, instanceJid: '999999999999@lid' },
+    session,
+    message
+  }), false);
+});
+
 test('agent decisions are parsed from Gemini JSON responses', () => {
   assert.deepEqual(parseAgentDecision('{"action":"reply","message":"Oi"}'), {
     action: 'reply',
