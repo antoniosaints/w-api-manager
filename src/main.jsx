@@ -132,6 +132,7 @@ function App() {
     socket.on('message:new', (message) => {
       if (message.sessionId === selectedConversationId) {
         setMessages((current) => mergeMessageUpdate(current, message));
+        markConversationRead(message.sessionId);
       }
       if (!selectedConversationId && message.sessionId) {
         setSelectedConversationId(message.sessionId);
@@ -175,6 +176,11 @@ function App() {
         if (messagesRequestRef.current === requestId) setChatLoading(false);
       });
   }, [currentUser, selectedConversationId]);
+
+  useEffect(() => {
+    if (!currentUser || !selectedConversationId || !selectedConversation?.unreadCount) return;
+    markConversationRead(selectedConversationId);
+  }, [currentUser, selectedConversationId, selectedConversation?.unreadCount]);
 
   async function checkAuth() {
     try {
@@ -247,6 +253,22 @@ function App() {
       if (!data[0]?.id) setMessages([]);
     }
     return data;
+  }
+
+  async function markConversationRead(sessionId) {
+    if (!sessionId) return null;
+    try {
+      const result = await api(`/api/support-sessions/${sessionId}/read`, { method: 'PATCH' });
+      if (result?.conversation) {
+        setConversations((current) =>
+          current.map((item) => (item.id === result.conversation.id ? result.conversation : item))
+        );
+      }
+      return result?.conversation || null;
+    } catch (error) {
+      handleError(error);
+      return null;
+    }
   }
 
   async function refreshUsers() {

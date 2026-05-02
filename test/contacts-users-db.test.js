@@ -23,6 +23,7 @@ import {
   listSectors,
   listSupportTags,
   listUsersTable,
+  markSupportSessionRead,
   normalizeLegacyGroupChatIds,
   saveContact,
   setSupportSessionTags,
@@ -567,6 +568,29 @@ test('support tags can be attached to attendances and are mapped in conversation
   assert.equal(tagged.tags.length, 1);
   assert.equal(listed.tags[0].id, tag.id);
   assert.equal(listed.tags[0].name, tag.name);
+});
+
+test('opening a support session can clear unread message count', () => {
+  const suffix = Date.now();
+  const message = createMessage({
+    phone: `551196${suffix}`,
+    name: 'Cliente Leitura',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Tem mensagem pendente',
+    status: 'received'
+  });
+
+  const unread = listConversations().find((item) => item.id === message.sessionId);
+  assert.equal(unread.unreadCount, 1);
+
+  const read = markSupportSessionRead(message.sessionId);
+  const listed = listConversations().find((item) => item.id === message.sessionId);
+  const contact = getContactByPhone(message.phone);
+
+  assert.equal(read.unreadCount, 0);
+  assert.equal(listed.unreadCount, 0);
+  assert.equal(contact.unreadCount, 0);
 });
 
 test('ai agents are persisted with transfer targets and admin configuration fields', () => {

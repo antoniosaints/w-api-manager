@@ -36,6 +36,7 @@ import {
   listUsersTable,
   listUsers,
   listWebhookEvents,
+  markSupportSessionRead,
   publicSettings,
   reopenSupportSession,
   saveSettings,
@@ -284,6 +285,16 @@ app.get('/api/conversations/:id/messages', (req, res) => {
     return res.status(403).json({ message: 'Atendimento fora da sua responsabilidade.' });
   }
   res.json(listMessages(req.params.id));
+});
+
+app.patch('/api/support-sessions/:id/read', (req, res) => {
+  if (!canAccessSupportSession(req.params.id, req.user)) {
+    return res.status(403).json({ message: 'Atendimento fora da sua responsabilidade.' });
+  }
+  const conversation = markSupportSessionRead(req.params.id);
+  if (!conversation) return res.status(404).json({ message: 'Atendimento nao encontrado.' });
+  emitConversations();
+  res.json({ conversation });
 });
 
 app.patch('/api/support-sessions/:id/status', (req, res) => {

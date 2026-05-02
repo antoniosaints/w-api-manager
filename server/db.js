@@ -1323,6 +1323,18 @@ export function listMessages(sessionId) {
   return [...messages, ...events].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 }
 
+export function markSupportSessionRead(id) {
+  const session = findSessionStmt.get(id);
+  if (!session) return null;
+
+  if (Number(session.unread_count || 0) > 0) {
+    db.prepare('UPDATE support_sessions SET unread_count = 0, updated_at = ? WHERE id = ?').run(now(), id);
+    syncContactFromLatestSession(session.phone);
+  }
+
+  return getSupportSessionById(id);
+}
+
 export function getMessageById(id) {
   return mapMessage(db.prepare('SELECT * FROM messages WHERE id = ?').get(id));
 }

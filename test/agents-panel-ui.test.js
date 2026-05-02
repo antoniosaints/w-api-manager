@@ -6,10 +6,11 @@ const agentsSource = readFileSync(new URL('../src/pages/AgentsPanel.jsx', import
 const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('agents panel separates agents sectors and tags in tabs', () => {
-  assert.match(agentsSource, /Tabs/);
-  assert.match(agentsSource, /value="agents"/);
-  assert.match(agentsSource, /value="sectors"/);
-  assert.match(agentsSource, /value="tags"/);
+  assert.doesNotMatch(agentsSource, /components\/shadcn\/tabs/);
+  assert.match(agentsSource, /role="tablist"/);
+  assert.match(agentsSource, /setActiveTab\("agents"\)/);
+  assert.match(agentsSource, /setActiveTab\("sectors"\)/);
+  assert.match(agentsSource, /setActiveTab\("tags"\)/);
   assert.match(agentsSource, /Agentes/);
   assert.match(agentsSource, /Setores/);
   assert.match(agentsSource, /Tags/);
@@ -25,10 +26,10 @@ test('agents sectors and tags use modal forms', () => {
 });
 
 test('agents listing exposes compact operational metadata', () => {
-  assert.match(stylesSource, /\.agents-tabs-shell/);
-  assert.match(stylesSource, /\.agents-tabs/);
-  assert.match(stylesSource, /\.agents-tabs-list/);
-  assert.match(stylesSource, /\.agents-tab-trigger/);
-  assert.match(stylesSource, /\.agent-row/);
-  assert.match(stylesSource, /\.agent-meta-grid/);
+  assert.match(stylesSource, /\.agents-console/);
+  assert.match(stylesSource, /\.agents-native-tabs/);
+  assert.match(stylesSource, /\.agents-native-tab/);
+  assert.match(stylesSource, /\.agents-management-toolbar/);
+  assert.match(stylesSource, /\.agents-management-table/);
+  assert.match(stylesSource, /\.agents-table-primary/);
 });

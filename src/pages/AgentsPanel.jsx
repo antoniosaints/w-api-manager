@@ -17,16 +17,11 @@ import {
   Checkbox,
   Input,
   Modal,
+  SearchField,
   Select,
   Switch,
   Textarea,
 } from "../components/ui/index.js";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../components/shadcn/tabs.jsx";
 
 const emptyAgent = {
   id: "",
@@ -62,7 +57,61 @@ export function AgentsPanel({
     geminiApiKey: "",
     automaticAttendance: false,
   });
+  const [activeTab, setActiveTab] = useState("agents");
+  const [listSearch, setListSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [saving, setSaving] = useState("");
+
+  const filteredAgents = filterManagementItems(
+    agents,
+    listSearch,
+    statusFilter,
+    (agent) =>
+      [
+        agent.name,
+        agent.context,
+        agent.model,
+        formatTransfer(agent, users, sectors),
+      ].join(" "),
+  );
+  const filteredSectors = filterManagementItems(
+    sectors,
+    listSearch,
+    statusFilter,
+    (sector) => `${sector.name} ${sector.color}`,
+  );
+  const filteredTags = filterManagementItems(
+    tags,
+    listSearch,
+    statusFilter,
+    (tag) => `${tag.name} ${tag.color}`,
+  );
+  const tabs = [
+    {
+      id: "agents",
+      label: "Agentes",
+      description: "IA e roteamento",
+      icon: Bot,
+      total: agents.length,
+      active: countActive(agents),
+    },
+    {
+      id: "sectors",
+      label: "Setores",
+      description: "Filas operacionais",
+      icon: UsersRound,
+      total: sectors.length,
+      active: countActive(sectors),
+    },
+    {
+      id: "tags",
+      label: "Tags",
+      description: "Classificacao",
+      icon: Tags,
+      total: tags.length,
+      active: countActive(tags),
+    },
+  ];
 
   useEffect(() => {
     load();
@@ -176,34 +225,98 @@ export function AgentsPanel({
 
   return (
     <Card as="section" variant="panel" className="single-panel agents-panel">
-      <div className="panel-title">
+      <div className="panel-title agents-title">
         <Bot size={24} />
         <div>
           <span>Automacao</span>
           <h1>Agentes, setores e tags</h1>
-          <p>Gerencie IA e classificacoes da operacao em uma tela unica.</p>
+          <p>Gerencie IA, filas e classificacoes sem sair do fluxo operacional.</p>
         </div>
       </div>
 
-      <div className="agents-tabs-shell">
-        <Tabs defaultValue="agents" className="agents-tabs">
-          <TabsList className="agents-tabs-list">
-            <TabsTrigger value="agents" className="agents-tab-trigger">Agentes</TabsTrigger>
-            <TabsTrigger value="sectors" className="agents-tab-trigger">Setores</TabsTrigger>
-            <TabsTrigger value="tags" className="agents-tab-trigger">Tags</TabsTrigger>
-          </TabsList>
+      <div className="agents-console">
+        <div className="agents-console-summary">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <div key={tab.id} className="agents-summary-item">
+                <Icon size={18} />
+                <span>
+                  <strong>{tab.total}</strong>
+                  <small>{tab.label}</small>
+                </span>
+                <em>{tab.active} ativos</em>
+              </div>
+            );
+          })}
+        </div>
 
-          <TabsContent value="agents" className="agents-tab-content">
-            <form className="automation-strip" onSubmit={saveGemini}>
+        <div className="agents-native-tabs" role="tablist" aria-label="Cadastros da automacao">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "agents"}
+            className={activeTab === "agents" ? "agents-native-tab active" : "agents-native-tab"}
+            onClick={() => {
+              setActiveTab("agents");
+              setListSearch("");
+              setStatusFilter("all");
+            }}
+          >
+            <Bot size={17} />
+            <span>
+              <strong>Agentes</strong>
+              <small>IA de atendimento</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "sectors"}
+            className={activeTab === "sectors" ? "agents-native-tab active" : "agents-native-tab"}
+            onClick={() => {
+              setActiveTab("sectors");
+              setListSearch("");
+              setStatusFilter("all");
+            }}
+          >
+            <UsersRound size={17} />
+            <span>
+              <strong>Setores</strong>
+              <small>Filas e areas</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "tags"}
+            className={activeTab === "tags" ? "agents-native-tab active" : "agents-native-tab"}
+            onClick={() => {
+              setActiveTab("tags");
+              setListSearch("");
+              setStatusFilter("all");
+            }}
+          >
+            <Tags size={17} />
+            <span>
+              <strong>Tags</strong>
+              <small>Marcadores</small>
+            </span>
+          </button>
+        </div>
+
+        {activeTab === "agents" && (
+          <section className="agents-tab-panel" role="tabpanel">
+            <form className="agents-automation-card" onSubmit={saveGemini}>
+              <div className="agents-automation-copy">
+                <strong>Motor de atendimento</strong>
+                <small>{settings?.hasGeminiApiKey ? "Chave Gemini configurada" : "Configure a chave Gemini para ativar a IA"}</small>
+              </div>
               <Input
                 label="Chave de API Gemini"
                 type="password"
                 value={geminiForm.geminiApiKey}
-                placeholder={
-                  settings?.hasGeminiApiKey
-                    ? "Chave ja configurada"
-                    : "Cole a chave do Gemini"
-                }
+                placeholder={settings?.hasGeminiApiKey ? "Chave ja configurada" : "Cole a chave do Gemini"}
                 onChange={(event) =>
                   setGeminiForm({
                     ...geminiForm,
@@ -223,97 +336,83 @@ export function AgentsPanel({
                 }
               />
               <Button variant="primary" disabled={saving === "gemini"}>
-                {saving === "gemini" ? (
-                  <Loader2 className="spin" size={18} />
-                ) : (
-                  <Save size={18} />
-                )}
+                {saving === "gemini" ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
                 Salvar
               </Button>
             </form>
 
-            <div className="table-section-heading">
-              <div>
-                <strong>Agentes</strong>
-                <small>{agents.length} cadastrados</small>
-              </div>
-              <Button
-                variant="primary"
-                onClick={() => setAgentModal(emptyAgent)}
-              >
-                <Plus size={18} />
-                Novo agente
-              </Button>
-            </div>
+            <ManagementHeader
+              title="Agentes"
+              count={filteredAgents.length}
+              total={agents.length}
+              actionLabel="Novo agente"
+              onCreate={() => setAgentModal(emptyAgent)}
+            />
+            <ManagementToolbar
+              search={listSearch}
+              status={statusFilter}
+              placeholder="Buscar por nome, contexto, modelo ou transferencia"
+              onSearchChange={setListSearch}
+              onStatusChange={setStatusFilter}
+            />
+            <AgentsTable
+              agents={filteredAgents}
+              users={users}
+              sectors={sectors}
+              onEdit={setAgentModal}
+            />
+          </section>
+        )}
 
-            <div className="agent-list">
-              {agents.map((agent) => (
-                <article key={agent.id} className="agent-row">
-                  <div className="agent-row-main">
-                    <strong>{agent.name}</strong>
-                    <small>{agent.context || "Sem contexto definido"}</small>
-                  </div>
-                  <div className="agent-meta-grid">
-                    <span>
-                      <strong>Modelo</strong>
-                      {agent.model}
-                    </span>
-                    <span>
-                      <strong>Temperatura</strong>
-                      {agent.temperature}
-                    </span>
-                    <span>
-                      <strong>Transferencia</strong>
-                      {formatTransfer(agent, users, sectors)}
-                    </span>
-                  </div>
-                  <Badge tone={agent.active ? "active" : "inactive"}>
-                    {agent.active ? "Ativo" : "Inativo"}
-                  </Badge>
-                  <div className="row-actions">
-                    <Button compact onClick={() => setAgentModal(agent)}>
-                      <Edit3 size={16} />
-                      Editar
-                    </Button>
-                  </div>
-                </article>
-              ))}
-              {!agents.length && (
-                <p className="empty">Nenhum agente criado ainda.</p>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="sectors" className="agents-tab-content">
-            <TaxonomyHeader
-              icon={UsersRound}
+        {activeTab === "sectors" && (
+          <section className="agents-tab-panel" role="tabpanel">
+            <ManagementHeader
               title="Setores"
-              count={sectors.length}
+              count={filteredSectors.length}
+              total={sectors.length}
+              actionLabel="Novo setor"
               onCreate={() => setSectorModal(emptyTaxonomy)}
             />
-            <TaxonomyList
-              items={sectors}
+            <ManagementToolbar
+              search={listSearch}
+              status={statusFilter}
+              placeholder="Buscar setor ou cor"
+              onSearchChange={setListSearch}
+              onStatusChange={setStatusFilter}
+            />
+            <TaxonomyTable
+              items={filteredSectors}
+              empty="Nenhum setor cadastrado."
               onEdit={setSectorModal}
               onDelete={(item) => removeItem("sector", item)}
-              empty="Nenhum setor cadastrado."
             />
-          </TabsContent>
+          </section>
+        )}
 
-          <TabsContent value="tags" className="agents-tab-content">
-            <TaxonomyHeader
-              icon={Tags}
+        {activeTab === "tags" && (
+          <section className="agents-tab-panel" role="tabpanel">
+            <ManagementHeader
               title="Tags"
-              count={tags.length}
+              count={filteredTags.length}
+              total={tags.length}
+              actionLabel="Nova tag"
               onCreate={() => setTagModal(emptyTaxonomy)}
             />
-            <TaxonomyList
-              items={tags}
+            <ManagementToolbar
+              search={listSearch}
+              status={statusFilter}
+              placeholder="Buscar tag ou cor"
+              onSearchChange={setListSearch}
+              onStatusChange={setStatusFilter}
+            />
+            <TaxonomyTable
+              items={filteredTags}
+              empty="Nenhuma tag cadastrada."
               onEdit={setTagModal}
               onDelete={(item) => removeItem("tag", item)}
-              empty="Nenhuma tag cadastrada."
             />
-          </TabsContent>
-        </Tabs>
+          </section>
+        )}
       </div>
       {agentModal && (
         <AgentFormModal
@@ -342,6 +441,148 @@ export function AgentsPanel({
         />
       )}
     </Card>
+  );
+}
+
+function ManagementToolbar({
+  search,
+  status,
+  placeholder,
+  onSearchChange,
+  onStatusChange,
+}) {
+  return (
+    <div className="agents-management-toolbar">
+      <SearchField
+        value={search}
+        placeholder={placeholder}
+        onChange={(event) => onSearchChange(event.target.value)}
+      />
+      <Select
+        value={status}
+        onChange={(event) => onStatusChange(event.target.value)}
+        className="agents-status-filter"
+      >
+        <option value="all">Todos</option>
+        <option value="active">Ativos</option>
+        <option value="inactive">Inativos</option>
+      </Select>
+    </div>
+  );
+}
+
+function ManagementHeader({ title, count, total, actionLabel, onCreate }) {
+  return (
+    <div className="agents-management-header">
+      <div>
+        <strong>{title}</strong>
+        <small>{count} de {total} registros</small>
+      </div>
+      <Button variant="primary" onClick={onCreate}>
+        <Plus size={18} />
+        {actionLabel}
+      </Button>
+    </div>
+  );
+}
+
+function AgentsTable({ agents, users, sectors, onEdit }) {
+  return (
+    <div className="agents-table-wrap">
+      <table className="agents-management-table">
+        <thead>
+          <tr>
+            <th>Agente</th>
+            <th>Status</th>
+            <th>Modelo</th>
+            <th>Temperatura</th>
+            <th>Transferencia</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {agents.map((agent) => (
+            <tr key={agent.id}>
+              <td data-label="Agente">
+                <span className="agents-table-primary">
+                  <strong>{agent.name}</strong>
+                  <small>{agent.context || "Sem contexto definido"}</small>
+                </span>
+              </td>
+              <td data-label="Status">
+                <Badge tone={agent.active ? "active" : "inactive"}>
+                  {agent.active ? "Ativo" : "Inativo"}
+                </Badge>
+              </td>
+              <td data-label="Modelo">{agent.model}</td>
+              <td data-label="Temperatura">{agent.temperature}</td>
+              <td data-label="Transferencia">{formatTransfer(agent, users, sectors)}</td>
+              <td data-label="Acoes">
+                <div className="agents-row-actions">
+                  <Button compact onClick={() => onEdit(agent)}>
+                    <Edit3 size={16} />
+                    Editar
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!agents.length && <p className="empty">Nenhum agente criado ainda.</p>}
+    </div>
+  );
+}
+
+function TaxonomyTable({ items, empty, onEdit, onDelete }) {
+  return (
+    <div className="agents-table-wrap">
+      <table className="agents-management-table">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Status</th>
+            <th>Cor</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td data-label="Nome">
+                <span className="agents-table-primary">
+                  <strong>{item.name}</strong>
+                  <small>Cadastro operacional</small>
+                </span>
+              </td>
+              <td data-label="Status">
+                <Badge tone={item.active ? "active" : "inactive"}>
+                  {item.active ? "Ativo" : "Inativo"}
+                </Badge>
+              </td>
+              <td data-label="Cor">
+                <span className="tag-pill" data-color={item.color}>
+                  {item.color}
+                </span>
+              </td>
+              <td data-label="Acoes">
+                <div className="agents-row-actions">
+                  <Button compact onClick={() => onEdit(item)}>
+                    <Edit3 size={16} />
+                    Editar
+                  </Button>
+                  <Button compact danger onClick={() => onDelete(item)} disabled={!item.active}>
+                    <Trash2 size={16} />
+                    Desativar
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!items.length && <p className="empty">{empty}</p>}
+    </div>
   );
 }
 
@@ -564,55 +805,6 @@ function TaxonomyFormModal({ initialItem, title, saving, onClose, onSave }) {
   );
 }
 
-function TaxonomyHeader({ icon: Icon, title, count, onCreate }) {
-  return (
-    <div className="table-section-heading">
-      <div>
-        <Icon size={18} />
-        <strong>{title}</strong>
-        <small>{count} cadastrados</small>
-      </div>
-      <Button variant="primary" onClick={onCreate}>
-        <Plus size={18} />
-        Novo
-      </Button>
-    </div>
-  );
-}
-
-function TaxonomyList({ items, onEdit, onDelete, empty }) {
-  return (
-    <div className="taxonomy-list">
-      {items.map((item) => (
-        <article key={item.id} className="taxonomy-row">
-          <span className="tag-pill" data-color={item.color}>
-            {item.name}
-          </span>
-          <Badge tone={item.active ? "active" : "inactive"}>
-            {item.active ? "Ativo" : "Inativo"}
-          </Badge>
-          <div className="row-actions">
-            <Button compact onClick={() => onEdit(item)}>
-              <Edit3 size={16} />
-              Editar
-            </Button>
-            <Button
-              compact
-              danger
-              onClick={() => onDelete(item)}
-              disabled={!item.active}
-            >
-              <Trash2 size={16} />
-              Desativar
-            </Button>
-          </div>
-        </article>
-      ))}
-      {!items.length && <p className="empty">{empty}</p>}
-    </div>
-  );
-}
-
 function formatTransfer(agent, users, sectors) {
   if (agent.transferMode === "user")
     return (
@@ -624,4 +816,18 @@ function formatTransfer(agent, users, sectors) {
       "Setor"
     );
   return "Sem padrao";
+}
+
+function filterManagementItems(items, search, status, getText) {
+  const normalizedSearch = search.trim().toLowerCase();
+  return items.filter((item) => {
+    if (status === "active" && !item.active) return false;
+    if (status === "inactive" && item.active) return false;
+    if (!normalizedSearch) return true;
+    return getText(item).toLowerCase().includes(normalizedSearch);
+  });
+}
+
+function countActive(items) {
+  return items.filter((item) => item.active).length;
 }
