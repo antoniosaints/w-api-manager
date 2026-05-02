@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, PlugZap, UserCheck } from 'lucide-react';
+import { Loader2, UserCheck } from 'lucide-react';
 import { Button, Card, Input } from '../components/ui/index.js';
 
 export function LoginScreen({ onLogin }) {
@@ -24,10 +24,10 @@ export function LoginScreen({ onLogin }) {
   return (
     <main className="auth-page">
       <Card as="form" variant="auth" className="auth-card stacked-form" onSubmit={submit}>
-        <span className="brand-mark"><PlugZap size={26} /></span>
-        <div>
+        <img className="auth-logo" src="/ura-logo.png" alt="Logo URA" />
+        <div className="auth-copy">
           <span>Acesso operacional</span>
-          <h1>W-API Atendimento</h1>
+          <h1>URA Atendimento</h1>
           <p>Entre para atender, transferir e acompanhar a operacao.</p>
         </div>
         <Input label="Email" value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />

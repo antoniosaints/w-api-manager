@@ -9,8 +9,7 @@ import {
   PanelLeftOpen,
   Palette,
   Sun,
-  UserCheck,
-  LucideMessageCircleDashed
+  UserCheck
 } from 'lucide-react';
 import { navItems, pageMeta } from '../app/navigation.jsx';
 import { Button } from './ui/index.js';
@@ -29,9 +28,11 @@ export function Sidebar({ view, setView, settings, currentUser, collapsed, onTog
   return (
     <aside className={collapsed ? 'sidebar collapsed' : 'sidebar'}>
       <div className="brand">
-        <span className="brand-mark"><LucideMessageCircleDashed size={24} /></span>
+        <span className="brand-logo-frame">
+          <img className="brand-logo" src="/ura-logo.png" alt="Logo URA" />
+        </span>
         <div className="brand-copy">
-          <strong>Atendimento Online</strong>
+          <strong>URA Atendimento</strong>
           <small>{settings?.instanceId || 'Instancia nao configurada'}</small>
         </div>
         <div className="sidebar-actions">
