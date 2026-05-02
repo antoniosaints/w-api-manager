@@ -134,9 +134,6 @@ function App() {
         setMessages((current) => mergeMessageUpdate(current, message));
         markConversationRead(message.sessionId);
       }
-      if (!selectedConversationId && message.sessionId) {
-        setSelectedConversationId(message.sessionId);
-      }
       showToast('Nova mensagem sincronizada');
     });
 
@@ -224,7 +221,6 @@ function App() {
       setUsers(userData);
       setSectors(sectorData);
       setSupportTags(tagData);
-      if (conversationData[0]?.id) setSelectedConversationId(conversationData[0].id);
     } catch (error) {
       handleError(error);
     }
@@ -249,8 +245,8 @@ function App() {
     if (preferredSessionId && data.some((item) => item.id === preferredSessionId)) {
       setSelectedConversationId(preferredSessionId);
     } else {
-      setSelectedConversationId(data[0]?.id || '');
-      if (!data[0]?.id) setMessages([]);
+      setSelectedConversationId('');
+      setMessages([]);
     }
     return data;
   }
@@ -917,8 +913,7 @@ function Inbox({
               className={activeTab === status ? 'active' : ''}
               onClick={() => {
                 setActiveTab(status);
-                const first = conversations.find((item) => conversationMatchesTab(item, status));
-                setSelectedConversationId(first?.id || '');
+                setSelectedConversationId('');
               }}
             >
               <span>{label}</span>

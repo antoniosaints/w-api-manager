@@ -1,4 +1,8 @@
 import {
+  downloadAndDecryptWhatsAppMedia,
+  extractWhatsAppMediaInfo
+} from './media.js';
+import {
   createMessage,
   getSettings,
   getSupportSessionById,
@@ -24,6 +28,7 @@ const AGENT_RESPONSE_SCHEMA = {
   },
   required: ['action']
 };
+const AGENT_MULTIMODAL_TYPES = new Set(['image', 'sticker', 'audio']);
 
 export function shouldRunAutomaticAgent({ settings, session, message }) {
   if (!settings?.automaticAttendance) return false;
@@ -69,6 +74,36 @@ export function buildAgentPrompt({ agent, users = [], sectors = [], tags = [], m
     '',
     'Responda apenas JSON valido com action, message, transferMode, transferUserId, transferSectorId e tags.'
   ].join('\n');
+}
+
+export async function buildAgentContents({ prompt, message, loadMedia = downloadAndDecryptWhatsAppMedia }) {
+  const parts = [{ text: prompt }];
+  const media = extractWhatsAppMediaInfo(message?.raw);
+  if (!media || !AGENT_MULTIMODAL_TYPES.has(media.type)) {
+    return [{ role: 'user', parts }];
+  }
+
+  try {
+    const loaded = await loadMedia(message.raw, media);
+    const buffer = Buffer.from(loaded?.buffer || []);
+    if (!buffer.length) {
+      parts.push({ text: `A ultima mensagem do cliente contem ${media.type}, mas o arquivo esta vazio.` });
+      return [{ role: 'user', parts }];
+    }
+
+    const mimeType = normalizeAgentMediaMime(loaded?.mimetype || media.mimetype, media.type);
+    parts.push({ text: `A ultima mensagem do cliente contem ${media.type}. Analise a midia anexada antes de decidir.` });
+    parts.push({
+      inlineData: {
+        mimeType,
+        data: buffer.toString('base64')
+      }
+    });
+  } catch (error) {
+    parts.push({ text: `A ultima mensagem do cliente contem ${media.type}, mas nao foi possivel baixar a midia para analise.` });
+  }
+
+  return [{ role: 'user', parts }];
 }
 
 export function parseAgentDecision(value) {
@@ -122,8 +157,13 @@ export async function runAutomaticAgentForMessage(message, options = {}) {
   const supportTags = listSupportTags({ activeOnly: true });
   const messages = listMessages(message.sessionId);
   const prompt = buildAgentPrompt({ agent, users, sectors, tags: supportTags, messages });
+  const contents = await buildAgentContents({
+    prompt,
+    message,
+    loadMedia: options.loadMedia || downloadAndDecryptWhatsAppMedia
+  });
   const generateDecision = options.generateDecision || ((input) => generateGeminiDecision(input, settings.geminiApiKey));
-  const decision = parseAgentDecision(await generateDecision({ agent, prompt }));
+  const decision = parseAgentDecision(await generateDecision({ agent, prompt, contents }));
   const finalDecision = applyDefaultTransfer(decision, agent);
 
   let reply = null;
@@ -219,12 +259,12 @@ function normalizeMentionIdentity(value) {
   return clean.replace(/\D/g, '') || clean;
 }
 
-async function generateGeminiDecision({ agent, prompt }, apiKey) {
+async function generateGeminiDecision({ agent, prompt, contents }, apiKey) {
   const { GoogleGenAI } = await import('@google/genai');
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateContent({
     model: agent.model || 'gemini-2.0-flash',
-    contents: prompt,
+    contents: contents || prompt,
     config: {
       temperature: agent.temperature ?? 0.4,
       responseMimeType: 'application/json',
@@ -233,6 +273,13 @@ async function generateGeminiDecision({ agent, prompt }, apiKey) {
     }
   });
   return response.text;
+}
+
+function normalizeAgentMediaMime(value, type) {
+  const mime = String(value || '').split(';')[0].trim().toLowerCase();
+  if (mime) return mime;
+  if (type === 'audio') return 'audio/ogg';
+  return 'image/jpeg';
 }
 
 function applyDefaultTransfer(decision, agent) {

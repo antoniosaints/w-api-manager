@@ -9,6 +9,7 @@ import {
   saveSettings
 } from '../server/db.js';
 import {
+  buildAgentContents,
   buildAgentPrompt,
   parseAgentDecision,
   runAutomaticAgentForMessage,
@@ -126,6 +127,53 @@ test('agent prompt includes context, rules, behavior and available transfer targ
   assert.match(prompt, /Nunca prometer desconto/);
   assert.match(prompt, /Financeiro/);
   assert.match(prompt, /Quero boleto/);
+});
+
+test('agent contents attach incoming image and audio media as Gemini inline data', async () => {
+  const prompt = 'Analise a ultima mensagem do cliente.';
+  const imageContent = await buildAgentContents({
+    prompt,
+    message: {
+      type: 'image',
+      raw: {
+        msgContent: {
+          imageMessage: {
+            url: 'https://mmg.whatsapp.net/v/t62/image.enc',
+            mimetype: 'image/jpeg',
+            mediaKey: 'abc'
+          }
+        }
+      }
+    },
+    loadMedia: async () => ({ mimetype: 'image/jpeg', buffer: Buffer.from('fake-image') })
+  });
+  const audioContent = await buildAgentContents({
+    prompt,
+    message: {
+      type: 'audio',
+      raw: {
+        msgContent: {
+          audioMessage: {
+            url: 'https://mmg.whatsapp.net/v/t62/audio.enc',
+            mimetype: 'audio/ogg',
+            mediaKey: 'abc'
+          }
+        }
+      }
+    },
+    loadMedia: async () => ({ mimetype: 'audio/ogg', buffer: Buffer.from('fake-audio') })
+  });
+
+  assert.equal(imageContent[0].role, 'user');
+  assert.equal(imageContent[0].parts[0].text, prompt);
+  assert.deepEqual(imageContent[0].parts.find((part) => part.inlineData)?.inlineData, {
+    mimeType: 'image/jpeg',
+    data: Buffer.from('fake-image').toString('base64')
+  });
+  assert.deepEqual(audioContent[0].parts.find((part) => part.inlineData)?.inlineData, {
+    mimeType: 'audio/ogg',
+    data: Buffer.from('fake-audio').toString('base64')
+  });
 });
 
 test('automatic agent can reply and transfer a waiting attendance to a sector', async () => {

@@ -20,6 +20,13 @@ test('inbox exposes waiting, active and finished tabs', () => {
   assert.match(stylesSource, /\.conversation-tabs/);
 });
 
+test('changing inbox tabs waits for the user to choose a conversation', () => {
+  assert.match(mainSource, /setActiveTab\(status\)/);
+  assert.match(mainSource, /setSelectedConversationId\(''\)/);
+  assert.doesNotMatch(mainSource, /const first = conversations\.find\(\(item\) => conversationMatchesTab\(item, status\)\)/);
+  assert.doesNotMatch(mainSource, /setSelectedConversationId\(first\?\.id \|\| ''\)/);
+});
+
 test('inbox exposes group tab and group sender labels', () => {
   assert.match(mainSource, /Grupos/);
   assert.match(mainSource, /isGroup/);
