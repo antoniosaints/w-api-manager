@@ -113,7 +113,27 @@ test('chat exposes quick scroll to the latest message', () => {
   assert.match(chatWindowSource, /scrollToLatestMessage/);
   assert.match(chatWindowSource, /showScrollToLatest/);
   assert.match(chatWindowSource, /chat-scroll-bottom/);
+  assert.match(chatWindowSource, /window\.requestAnimationFrame/);
+  assert.match(chatWindowSource, /stream\.scrollTo/);
+  assert.match(chatWindowSource, /loadingMessages/);
   assert.match(stylesSource, /\.chat-scroll-bottom/);
+});
+
+test('composer uploads media separately and sends only a lightweight upload reference', () => {
+  const chatWindowSource = readFileSync(new URL('../src/components/chat/ChatWindow.jsx', import.meta.url), 'utf8');
+  assert.match(serverSource, /app\.post\('\/api\/messages\/upload'/);
+  assert.match(serverSource, /express\.raw/);
+  assert.match(chatWindowSource, /\/api\/messages\/upload/);
+  assert.match(chatWindowSource, /uploadPreparedMedia/);
+  assert.match(chatWindowSource, /uploadId/);
+  assert.doesNotMatch(chatWindowSource, /dataUrl:\s*mediaDraft\.dataUrl/);
+});
+
+test('selected chat clears unread badge optimistically while read confirmation is saved', () => {
+  assert.match(mainSource, /function markConversationRead\(sessionId\)/);
+  assert.match(mainSource, /item\.id === sessionId \? \{ \.\.\.item, unreadCount: 0 \} : item/);
+  assert.match(serverSource, /app\.patch\('\/api\/support-sessions\/:id\/read'/);
+  assert.match(serverSource, /markSupportSessionRead\(req\.params\.id\)/);
 });
 
 test('toast is positioned at the top center of the viewport', () => {

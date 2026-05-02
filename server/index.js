@@ -69,7 +69,7 @@ import { downloadAndDecryptWhatsAppMedia } from './media.js';
 import { prepareAudioForWapi } from './outbound-audio.js';
 import { buildMediaRawMetadata, mediaFallbackText, normalizeOutboundMedia } from './outbound-media.js';
 import { applyMessageNameHeader } from './outbound-message.js';
-import { persistOutboundMediaReference } from './outbound-storage.js';
+import { loadOutboundUploadAsDataUrl, persistOutboundMediaBuffer, persistOutboundMediaReference } from './outbound-storage.js';
 import { normalizePaymentStatus } from './payment.js';
 import { isGroupPayload, isReactionPayload, normalizeIncomingMessage, normalizeWebhookBatch } from './normalize.js';
 import { runAutomaticAgentForMessage } from './ai-agents.js';
@@ -78,6 +78,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT || 3333);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '120mb';
+const OUTBOUND_UPLOAD_BODY_LIMIT = process.env.OUTBOUND_UPLOAD_BODY_LIMIT || '80mb';
 
 const app = express();
 const server = http.createServer(app);
@@ -90,7 +92,7 @@ const io = new Server(server, {
 });
 
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
-app.use(express.json({ limit: '80mb' }));
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use('/uploads', express.static(path.resolve('uploads')));
 
 app.get('/api/health', (_req, res) => {
@@ -392,6 +394,39 @@ app.get('/api/wapi/qr-code', requireAdmin, asyncHandler(async (_req, res) => {
   res.json(await getQrCode());
 }));
 
+app.post('/api/messages/upload', express.raw({ type: '*/*', limit: OUTBOUND_UPLOAD_BODY_LIMIT }), asyncHandler(async (req, res) => {
+  const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  if (!buffer.length) {
+    return res.status(400).json({ message: 'Arquivo de midia vazio.' });
+  }
+
+  const fileName = decodeHeaderValue(req.get('x-wapi-file-name')) || 'arquivo';
+  const extension = cleanExtension(req.get('x-wapi-file-extension') || path.extname(fileName));
+  const mimeType = cleanUploadMimeType(req.get('x-wapi-mime-type') || req.get('content-type'), extension);
+  const media = normalizeOutboundMedia({
+    type: req.get('x-wapi-media-type') || '',
+    url: 'uploaded-media',
+    name: fileName,
+    mimeType,
+    extension,
+    size: buffer.length
+  });
+  const stored = persistOutboundMediaBuffer(media, buffer);
+
+  res.status(201).json({
+    media: {
+      type: stored.type,
+      uploadId: stored.uploadId,
+      publicPath: stored.publicPath,
+      fileName: stored.fileName,
+      name: stored.fileName,
+      mimeType: stored.mimeType,
+      extension: stored.extension,
+      size: stored.size
+    }
+  });
+}));
+
 app.post('/api/messages/send', asyncHandler(async (req, res) => {
   const phone = cleanPhone(req.body?.phone);
   const body = String(req.body?.message || '').trim();
@@ -585,6 +620,16 @@ function cleanPhone(value) {
 
 function resolveOutboundMedia(body) {
   if (body?.media && typeof body.media === 'object') {
+    if (body.media.uploadId) {
+      const uploaded = loadOutboundUploadAsDataUrl(body.media);
+      const normalized = normalizeOutboundMedia({ ...uploaded, dataUrl: uploaded.reference });
+      return {
+        ...normalized,
+        uploadId: uploaded.uploadId,
+        publicPath: uploaded.publicPath,
+        relativePath: uploaded.relativePath
+      };
+    }
     return normalizeOutboundMedia(body.media);
   }
 
@@ -643,6 +688,26 @@ function resolveWebhookMessageStatus(payload, eventType, direction) {
 
 function firstString(values) {
   return values.find((value) => typeof value === 'string' && value.trim())?.trim() || '';
+}
+
+function decodeHeaderValue(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+function cleanUploadMimeType(value, extension = '') {
+  const mimeType = String(value || '').split(';')[0].trim().toLowerCase();
+  if (mimeType === 'application/octet-stream' && extension) return '';
+  return mimeType;
+}
+
+function cleanExtension(value) {
+  return String(value || '').replace(/^\./, '').trim().toLowerCase();
 }
 
 function parsePeriodQuery(query) {

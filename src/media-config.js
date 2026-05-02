@@ -137,6 +137,7 @@ export async function prepareMediaFile(file, { onProgress } = {}) {
     mimeType: output.type || file.type,
     size: bytes,
     dataUrl,
+    blob: output,
     extension: getFileExtension(file.name),
     compressed
   };

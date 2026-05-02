@@ -19,7 +19,7 @@ import {
   X,
   MessageSquareShareIcon
 } from 'lucide-react';
-import { api } from '../../shared/api.js';
+import { API, api } from '../../shared/api.js';
 import { formatTime, initials, isPlaceholderBody } from '../../shared/format.js';
 import { getMessageMedia } from '../../media.js';
 import { MEDIA_FILE_ACCEPT, formatBytes, formatDuration, prepareMediaFile, validateMediaFile } from '../../media-config.js';
@@ -56,6 +56,7 @@ export function ChatWindow({
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const streamRef = useRef(null);
   const bottomRef = useRef(null);
+  const lastScrolledSessionRef = useRef('');
   const fileInputRef = useRef(null);
   const recorderRef = useRef(null);
   const recordingStreamRef = useRef(null);
@@ -72,8 +73,20 @@ export function ChatWindow({
   const isProcessingRecording = recordingState === 'processing';
 
   useEffect(() => {
-    scrollToLatestMessage('smooth');
-  }, [messages.length, selectedSessionId]);
+    if (!selectedSessionId || loadingMessages) return undefined;
+
+    const isNewSession = lastScrolledSessionRef.current !== selectedSessionId;
+    lastScrolledSessionRef.current = selectedSessionId;
+    const behavior = isNewSession ? 'auto' : 'smooth';
+    scrollToLatestMessage(behavior);
+
+    const frame = window.requestAnimationFrame(() => scrollToLatestMessage('auto'));
+    const timeout = window.setTimeout(() => scrollToLatestMessage('auto'), 90);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [loadingMessages, messages.length, selectedSessionId]);
 
   useEffect(() => {
     setDraft('');
@@ -100,7 +113,8 @@ export function ChatWindow({
           sessionId: selectedSessionId,
           media: mediaDraft ? {
             type: mediaDraft.type,
-            dataUrl: mediaDraft.dataUrl,
+            uploadId: mediaDraft.uploadId,
+            publicPath: mediaDraft.publicPath,
             name: mediaDraft.name,
             mimeType: mediaDraft.mimeType,
             size: mediaDraft.size,
@@ -142,9 +156,12 @@ export function ChatWindow({
       if (!validation.valid) throw new Error(validation.message);
       setMediaProgress(4);
       const prepared = await prepareMediaFile(file, { onProgress: setMediaProgress });
-      setMediaDraft(prepared);
+      setMediaProgress(98);
+      const uploaded = await uploadPreparedMedia(prepared);
+      setMediaDraft(uploaded);
+      setMediaProgress(0);
     } catch (error) {
-      onError(error instanceof Error ? error : new Error('Nao foi possivel ler a midia selecionada.'));
+      onError(error instanceof Error ? error : new Error('Nao foi possivel preparar a midia selecionada.'));
       setMediaProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -223,7 +240,10 @@ export function ChatWindow({
       const extension = mimeToExtension(mimeType);
       const file = new File([new Blob(chunks, { type: mimeType })], `audio-gravado.${extension}`, { type: mimeType });
       const prepared = await prepareMediaFile(file, { onProgress: setMediaProgress });
-      setMediaDraft({ ...prepared, type: 'audio', name: 'audio-gravado.' + extension, extension });
+      setMediaProgress(98);
+      const uploaded = await uploadPreparedMedia({ ...prepared, type: 'audio', name: 'audio-gravado.' + extension, extension });
+      setMediaDraft(uploaded);
+      setMediaProgress(0);
     } catch (error) {
       onError(error instanceof Error ? error : new Error('Nao foi possivel preparar o audio gravado.'));
       setMediaProgress(0);
@@ -250,7 +270,16 @@ export function ChatWindow({
   }
 
   function scrollToLatestMessage(behavior = 'smooth') {
-    bottomRef.current?.scrollIntoView({ behavior, block: 'end' });
+    const stream = streamRef.current;
+    if (stream) {
+      if (typeof stream.scrollTo === 'function') {
+        stream.scrollTo({ top: stream.scrollHeight, behavior });
+      } else {
+        stream.scrollTop = stream.scrollHeight;
+      }
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior, block: 'end' });
+    }
     setShowScrollToLatest(false);
   }
 
@@ -439,6 +468,52 @@ export function ChatWindow({
       </form>
     </section>
   );
+}
+
+async function uploadPreparedMedia(prepared) {
+  const blob = prepared.blob || dataUrlToBlob(prepared.dataUrl, prepared.mimeType);
+  const response = await fetch(`${API}/api/messages/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': prepared.mimeType || blob.type || 'application/octet-stream',
+      'X-WAPI-Media-Type': prepared.type,
+      'X-WAPI-File-Name': encodeURIComponent(prepared.name || 'arquivo'),
+      'X-WAPI-File-Extension': prepared.extension || '',
+      'X-WAPI-File-Size': String(prepared.size || blob.size || 0)
+    },
+    body: blob
+  });
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    throw new Error(payload.message || 'Falha no upload da midia.');
+  }
+
+  const media = payload.media || {};
+  return {
+    ...prepared,
+    dataUrl: '',
+    blob: null,
+    uploadId: media.uploadId,
+    publicPath: media.publicPath,
+    name: media.fileName || media.name || prepared.name,
+    mimeType: media.mimeType || prepared.mimeType,
+    size: media.size || prepared.size,
+    extension: media.extension || prepared.extension,
+    uploaded: true
+  };
+}
+
+function dataUrlToBlob(dataUrl, fallbackType = 'application/octet-stream') {
+  const [meta = '', payload = ''] = String(dataUrl || '').split(',');
+  const mimeType = meta.match(/^data:([^;,]+)/)?.[1] || fallbackType || 'application/octet-stream';
+  const binary = atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
 }
 
 function ContactAvatar({ contact, fallback = '', large = false }) {

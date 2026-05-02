@@ -257,6 +257,9 @@ function App() {
 
   async function markConversationRead(sessionId) {
     if (!sessionId) return null;
+    setConversations((current) =>
+      current.map((item) => (item.id === sessionId ? { ...item, unreadCount: 0 } : item))
+    );
     try {
       const result = await api(`/api/support-sessions/${sessionId}/read`, { method: 'PATCH' });
       if (result?.conversation) {

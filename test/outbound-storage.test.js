@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { persistOutboundMediaReference } from '../server/outbound-storage.js';
+import {
+  loadOutboundUploadAsDataUrl,
+  persistOutboundMediaBuffer,
+  persistOutboundMediaReference
+} from '../server/outbound-storage.js';
 
 test('persists outbound data url media to a renderable uploads path', () => {
   const stored = persistOutboundMediaReference({
@@ -47,4 +51,23 @@ test('leaves remote outbound media references untouched', () => {
 
   assert.equal(stored.reference, 'https://cdn.example.test/audio.ogg');
   assert.equal(stored.publicPath, 'https://cdn.example.test/audio.ogg');
+});
+
+test('persists binary outbound uploads and reloads them as data urls for W-API', () => {
+  const stored = persistOutboundMediaBuffer({
+    type: 'document',
+    fileName: 'contrato.pdf',
+    extension: 'pdf',
+    mimeType: 'application/pdf'
+  }, Buffer.from('%PDF-fake'));
+  const absolutePath = path.join(process.env.WAPI_UPLOAD_DIR, stored.relativePath.replace(/^\/uploads\//, ''));
+  const loaded = loadOutboundUploadAsDataUrl(stored);
+
+  assert.match(stored.uploadId, /^[a-f0-9-]+\.pdf$/);
+  assert.match(stored.publicPath, /^\/uploads\/outbound\/.+\.pdf$/);
+  assert.equal(existsSync(absolutePath), true);
+  assert.equal(readFileSync(absolutePath, 'utf8'), '%PDF-fake');
+  assert.equal(loaded.reference, `data:application/pdf;base64,${Buffer.from('%PDF-fake').toString('base64')}`);
+  assert.equal(loaded.publicPath, stored.publicPath);
+  assert.equal(loaded.size, 9);
 });
