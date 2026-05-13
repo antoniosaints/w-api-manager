@@ -5,12 +5,17 @@ import {
   buildDashboardMetrics,
   createAuthSession,
   createMessage,
+  createSector,
+  createSupportTag,
   createUser,
   deleteAuthSession,
   getAuthSessionUser,
+  listHistorySessions,
   listConversations,
   listMessages,
   listUsers,
+  setSupportSessionSector,
+  setSupportSessionTags,
   transferSupportSession,
   updateSupportSessionStatus
 } from '../server/db.js';
@@ -207,4 +212,159 @@ test('attendants only see waiting conversations or sessions assigned to them', (
   assert.equal(visible.includes(waiting.sessionId), true);
   assert.equal(visible.includes(owned.sessionId), true);
   assert.equal(visible.includes(hidden.sessionId), false);
+});
+
+test('supervisors use the restricted operational queue scope', () => {
+  const suffix = Date.now();
+  const supervisor = createUser({
+    name: `Supervisor ${suffix}`,
+    email: `supervisor-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'supervisor',
+    active: true
+  });
+  const other = createUser({
+    name: `Outro Supervisor ${suffix}`,
+    email: `outro-supervisor-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true
+  });
+  const waiting = createMessage({
+    phone: `552191${suffix}`,
+    name: 'Cliente Espera Supervisor',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Fila supervisor',
+    status: 'received'
+  });
+  const owned = createMessage({
+    phone: `552192${suffix}`,
+    name: 'Cliente Supervisor',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Meu atendimento supervisor',
+    status: 'received'
+  });
+  const hidden = createMessage({
+    phone: `552193${suffix}`,
+    name: 'Cliente Outro Supervisor',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Atendimento de outro usuario',
+    status: 'received'
+  });
+  updateSupportSessionStatus(owned.sessionId, 'active', supervisor);
+  updateSupportSessionStatus(hidden.sessionId, 'active', other);
+
+  const visible = listConversations({ viewer: supervisor }).map((item) => item.id);
+
+  assert.equal(supervisor.role, 'supervisor');
+  assert.equal(visible.includes(waiting.sessionId), true);
+  assert.equal(visible.includes(owned.sessionId), true);
+  assert.equal(visible.includes(hidden.sessionId), false);
+});
+
+test('history sessions are paginated and filter by attendant, sector, date and search', () => {
+  const suffix = Date.now();
+  const admin = createUser({
+    name: `Admin Historico ${suffix}`,
+    email: `admin-historico-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'admin',
+    active: true
+  });
+  const attendant = createUser({
+    name: `Atendente Historico ${suffix}`,
+    email: `atendente-historico-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true
+  });
+  const sector = createSector({ name: `Financeiro ${suffix}`, color: 'blue', active: true });
+  const match = createMessage({
+    phone: `553191${suffix}`,
+    name: 'Cliente Filtro Historico',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Preciso consultar boleto',
+    status: 'received',
+    createdAt: '2026-05-10T10:00:00.000Z'
+  });
+  const outside = createMessage({
+    phone: `553192${suffix}`,
+    name: 'Cliente Fora Historico',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Outro assunto',
+    status: 'received',
+    createdAt: '2026-05-01T10:00:00.000Z'
+  });
+  updateSupportSessionStatus(match.sessionId, 'active', attendant);
+  setSupportSessionSector(match.sessionId, sector.id, admin);
+  updateSupportSessionStatus(outside.sessionId, 'active', admin);
+
+  const result = listHistorySessions({
+    viewer: admin,
+    search: 'boleto',
+    assignedUserId: attendant.id,
+    sectorId: sector.id,
+    from: '2026-05-09T00:00:00.000Z',
+    to: '2026-05-11T23:59:59.999Z',
+    page: 1,
+    limit: 5
+  });
+
+  assert.equal(result.meta.page, 1);
+  assert.equal(result.meta.limit, 5);
+  assert.equal(result.data.some((item) => item.id === match.sessionId), true);
+  assert.equal(result.data.some((item) => item.id === outside.sessionId), false);
+});
+
+test('dashboard metrics include professional kpis and chart series', () => {
+  const suffix = Date.now();
+  const owner = createUser({
+    name: `Dashboard Pro ${suffix}`,
+    email: `dashboard-pro-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true
+  });
+  const target = createUser({
+    name: `Dashboard Transfer ${suffix}`,
+    email: `dashboard-transfer-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true
+  });
+  const sector = createSector({ name: `Suporte Pro ${suffix}`, color: 'green', active: true });
+  const tag = createSupportTag({ name: `Urgente ${suffix}`, color: 'red', active: true });
+  const message = createMessage({
+    phone: `554191${suffix}`,
+    name: 'Cliente KPI',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Preciso de ajuda',
+    status: 'received',
+    createdAt: '2026-05-12T09:00:00.000Z'
+  });
+  updateSupportSessionStatus(message.sessionId, 'active', owner);
+  setSupportSessionSector(message.sessionId, sector.id, owner);
+  setSupportSessionTags(message.sessionId, [tag.id]);
+  transferSupportSession(message.sessionId, target.id, owner);
+  updateSupportSessionStatus(message.sessionId, 'finished', target);
+
+  const dashboard = buildDashboardMetrics({
+    from: '2026-05-11T00:00:00.000Z',
+    to: '2026-05-13T23:59:59.999Z'
+  });
+
+  assert.ok(Number.isFinite(dashboard.summary.averageWaitMinutes));
+  assert.ok(Number.isFinite(dashboard.summary.completionRate));
+  assert.ok(Number.isFinite(dashboard.summary.messagesPerSession));
+  assert.ok(dashboard.summary.transfers >= 1);
+  assert.ok(Array.isArray(dashboard.timeline));
+  assert.ok(dashboard.timeline.some((item) => item.date === '2026-05-12'));
+  assert.ok(dashboard.bySector.some((item) => item.sectorId === sector.id));
+  assert.ok(dashboard.byTag.some((item) => item.tagId === tag.id));
 });

@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const mainSource = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
 const shellSource = readFileSync(new URL('../src/components/AppShell.jsx', import.meta.url), 'utf8');
+const chatWindowSource = readFileSync(new URL('../src/components/chat/ChatWindow.jsx', import.meta.url), 'utf8');
 const uiIndexSource = readFileSync(new URL('../src/components/ui/index.js', import.meta.url), 'utf8');
 
 test('app exposes contacts navigation and page wiring', () => {
@@ -14,7 +15,7 @@ test('app exposes contacts navigation and page wiring', () => {
 
 test('management tables expose delete actions and chat switch loading state', () => {
   assert.match(mainSource, /chatLoading/);
-  assert.match(mainSource, /Carregando mensagens/);
+  assert.match(chatWindowSource, /Carregando mensagens/);
   assert.match(mainSource, /onDeleteContact/);
   assert.match(mainSource, /onDeleteUser/);
 });
@@ -49,7 +50,7 @@ test('main module is reduced by moving UI, shell or page code into modules', () 
 
 test('non-chat app chrome and dashboard controls are shadcn-backed', () => {
   assert.match(uiIndexSource, /export \{ Card \} from '\.\/Card\.jsx'/);
-  assert.match(mainSource, /Card,\s*SearchField,\s*Select/);
+  assert.match(mainSource, /Card[\s\S]*SearchField[\s\S]*Select/);
   assert.doesNotMatch(mainSource, /<select value=\{periodFilter\}/);
   assert.doesNotMatch(mainSource, /<label className="search-box">[\s\S]*Buscar historico/);
   assert.match(shellSource, /import \{ Button \} from '\.\/ui\/index\.js'/);

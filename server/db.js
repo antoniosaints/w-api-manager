@@ -910,7 +910,6 @@ export function listPushSubscriptionsByUserIds(userIds = []) {
     JOIN users u ON u.id = ps.user_id
     WHERE ps.user_id IN (${placeholders})
       AND u.active = 1
-      AND u.push_enabled = 1
     ORDER BY datetime(ps.updated_at) DESC
   `).all(...ids).map(mapPushSubscription);
 }
@@ -923,7 +922,7 @@ export function listPushSubscriptionsForSession(sessionId) {
     ? [session.assigned_user_id]
     : db.prepare(`
         SELECT id FROM users
-        WHERE active = 1 AND push_enabled = 1
+        WHERE active = 1
       `).all().map((row) => row.id);
 
   return listPushSubscriptionsByUserIds(userIds);
@@ -1396,10 +1395,33 @@ export function listConversations(filters = {}) {
   return listSupportSessions(filters);
 }
 
+export function listHistorySessions(filters = {}) {
+  const page = Math.max(1, Number(filters.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(filters.limit) || 12));
+  const rows = listSupportSessions(filters);
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const start = (page - 1) * limit;
+
+  return {
+    data: rows.slice(start, start + limit),
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages
+    }
+  };
+}
+
 export function listSupportSessions(filters = {}) {
   const { from, to, viewer } = filters;
   const where = [];
   const params = {};
+  const search = String(filters.search || '').trim().toLowerCase();
+  const status = String(filters.status || '').trim();
+  const assignedUserId = String(filters.assignedUserId || '').trim();
+  const sectorId = String(filters.sectorId || '').trim();
 
   if (from) {
     where.push('datetime(COALESCE(s.closed_at, s.last_message_at, s.started_at)) >= datetime(@from)');
@@ -1408,6 +1430,22 @@ export function listSupportSessions(filters = {}) {
   if (to) {
     where.push('datetime(COALESCE(s.closed_at, s.last_message_at, s.started_at)) <= datetime(@to)');
     params.to = to;
+  }
+  if (status) {
+    where.push('s.status = @status');
+    params.status = normalizeConversationStatus(status);
+  }
+  if (assignedUserId) {
+    where.push('s.assigned_user_id = @assignedUserId');
+    params.assignedUserId = assignedUserId;
+  }
+  if (sectorId) {
+    where.push('s.sector_id = @sectorId');
+    params.sectorId = sectorId;
+  }
+  if (search) {
+    where.push("(lower(COALESCE(c.name, '')) LIKE @search OR lower(s.phone) LIKE @search OR lower(COALESCE(m.body, '')) LIKE @search)");
+    params.search = `%${search}%`;
   }
   if (viewer?.role !== 'admin' && viewer?.id) {
     where.push("((s.status = 'waiting' AND s.assigned_user_id IS NULL) OR s.assigned_user_id = @viewerUserId)");
@@ -1744,9 +1782,11 @@ export function buildSupportMetrics(filters = {}) {
 
 export function buildDashboardMetrics(filters = {}) {
   const sessions = listSupportSessions(filters);
-  const messages = listPeriodMessages(filters);
+  const sessionIds = sessions.map((session) => session.id);
+  const messages = listPeriodMessages({ ...filters, sessionIds });
+  const sessionEvents = listPeriodSessionEvents({ ...filters, sessionIds });
   const events = listWebhookEvents(12);
-  const transfers = listRecentSessionEvents('transferred', 12);
+  const transfers = sessionEvents.filter((event) => event.type === 'transferred').slice(0, 12);
   const unreadTotal = sessions.reduce((total, session) => total + Number(session.unreadCount || 0), 0);
   const status = {
     waiting: sessions.filter((session) => session.chatStatus === 'waiting').length,
@@ -1773,6 +1813,9 @@ export function buildDashboardMetrics(filters = {}) {
     return acc;
   }, {})).sort((a, b) => b.count - a.count).slice(0, 8);
   const byUser = buildUserMetrics(sessions);
+  const transferCount = sessionEvents.filter((event) => event.type === 'transferred').length;
+  const reopenedCount = sessionEvents.filter((event) => event.type === 'reopened').length;
+  const finishedCount = status.finished;
 
   return {
     summary: {
@@ -1783,11 +1826,20 @@ export function buildDashboardMetrics(filters = {}) {
       inboundMessages: messages.filter((message) => message.direction === 'inbound').length,
       outboundMessages: messages.filter((message) => message.direction === 'outbound').length,
       averageFirstResponseMinutes: averageFirstResponseMinutes(sessions),
-      averageCloseMinutes: averageCloseMinutes(sessions)
+      averageWaitMinutes: averageWaitMinutes(sessions),
+      averageCloseMinutes: averageCloseMinutes(sessions),
+      completionRate: sessions.length ? Math.round((finishedCount / sessions.length) * 100) : 0,
+      transfers: transferCount,
+      reopened: reopenedCount,
+      messagesPerSession: sessions.length ? Number((messages.length / sessions.length).toFixed(1)) : 0
     },
     status,
     byContact,
     byUser,
+    bySector: buildSectorMetrics(sessions),
+    byTag: buildTagMetrics(sessions),
+    timeline: buildDashboardTimeline(sessions, messages),
+    statusSeries: Object.entries(status).map(([key, value]) => ({ key, value })),
     currentLoad: byUser.map((item) => ({
       userId: item.userId,
       name: item.name,
@@ -2262,6 +2314,16 @@ function migrateLegacySessions() {
 function listPeriodMessages(filters = {}) {
   const where = [];
   const params = {};
+  const sessionIds = Array.isArray(filters.sessionIds) ? filters.sessionIds.filter(Boolean) : [];
+  if (sessionIds.length) {
+    const placeholders = sessionIds.map((_, index) => `@sessionId${index}`);
+    where.push(`session_id IN (${placeholders.join(', ')})`);
+    sessionIds.forEach((id, index) => {
+      params[`sessionId${index}`] = id;
+    });
+  } else if (Object.prototype.hasOwnProperty.call(filters, 'sessionIds')) {
+    return [];
+  }
   if (filters.from) {
     where.push('datetime(created_at) >= datetime(@from)');
     params.from = filters.from;
@@ -2274,6 +2336,34 @@ function listPeriodMessages(filters = {}) {
     SELECT * FROM messages
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
   `).all(params).map(mapMessage);
+}
+
+function listPeriodSessionEvents(filters = {}) {
+  const sessionIds = Array.isArray(filters.sessionIds) ? filters.sessionIds.filter(Boolean) : [];
+  if (!sessionIds.length) return [];
+  const where = [`e.session_id IN (${sessionIds.map((_, index) => `@sessionId${index}`).join(', ')})`];
+  const params = {};
+  sessionIds.forEach((id, index) => {
+    params[`sessionId${index}`] = id;
+  });
+  if (filters.from) {
+    where.push('datetime(e.created_at) >= datetime(@from)');
+    params.from = filters.from;
+  }
+  if (filters.to) {
+    where.push('datetime(e.created_at) <= datetime(@to)');
+    params.to = filters.to;
+  }
+
+  return db.prepare(`
+    SELECT e.*, actor.name AS actor_user_name, target.name AS target_user_name, sector.name AS target_sector_name
+    FROM support_session_events e
+    LEFT JOIN users actor ON actor.id = e.actor_user_id
+    LEFT JOIN users target ON target.id = e.target_user_id
+    LEFT JOIN sectors sector ON sector.id = e.target_sector_id
+    WHERE ${where.join(' AND ')}
+    ORDER BY datetime(e.created_at) DESC
+  `).all(params).map(mapSessionEvent);
 }
 
 function listRecentSessionEvents(type, limit = 12) {
@@ -2363,6 +2453,85 @@ function buildUserMetrics(sessions) {
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 }
 
+function buildSectorMetrics(sessions) {
+  return Object.values(sessions.reduce((acc, session) => {
+    const key = session.sectorId || 'unassigned';
+    if (!acc[key]) {
+      acc[key] = {
+        sectorId: session.sectorId || null,
+        name: session.sectorName || 'Sem setor',
+        color: session.sectorColor || 'green',
+        total: 0,
+        waiting: 0,
+        active: 0,
+        finished: 0
+      };
+    }
+    acc[key].total += 1;
+    acc[key][session.chatStatus] += 1;
+    return acc;
+  }, {})).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+
+function buildTagMetrics(sessions) {
+  const metrics = new Map();
+  for (const session of sessions) {
+    for (const tag of session.tags || []) {
+      if (!metrics.has(tag.id)) {
+        metrics.set(tag.id, {
+          tagId: tag.id,
+          name: tag.name,
+          color: tag.color,
+          total: 0,
+          waiting: 0,
+          active: 0,
+          finished: 0
+        });
+      }
+      const item = metrics.get(tag.id);
+      item.total += 1;
+      item[session.chatStatus] += 1;
+    }
+  }
+  return [...metrics.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+
+function buildDashboardTimeline(sessions, messages) {
+  const byDate = new Map();
+  const ensure = (value) => {
+    const date = toDateKey(value);
+    if (!date) return null;
+    if (!byDate.has(date)) {
+      byDate.set(date, {
+        date,
+        sessions: 0,
+        finished: 0,
+        inbound: 0,
+        outbound: 0
+      });
+    }
+    return byDate.get(date);
+  };
+
+  for (const session of sessions) {
+    const started = ensure(session.startedAt || session.createdAt);
+    if (started) started.sessions += 1;
+    if (session.closedAt) {
+      const finished = ensure(session.closedAt);
+      if (finished) finished.finished += 1;
+    }
+  }
+
+  for (const message of messages) {
+    const item = ensure(message.createdAt);
+    if (!item) continue;
+    if (message.direction === 'inbound') item.inbound += 1;
+    if (message.direction === 'outbound') item.outbound += 1;
+  }
+
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 function averageFirstResponseMinutes(sessions) {
   const values = sessions.map((session) => {
     const inbound = db.prepare(`
@@ -2383,6 +2552,20 @@ function averageFirstResponseMinutes(sessions) {
   return Math.round(average(values));
 }
 
+function averageWaitMinutes(sessions) {
+  const values = sessions.map((session) => {
+    const attended = db.prepare(`
+      SELECT created_at FROM support_session_events
+      WHERE session_id = ? AND type = 'attended'
+      ORDER BY datetime(created_at) ASC
+      LIMIT 1
+    `).get(session.id);
+    if (!attended) return null;
+    return Math.max(0, new Date(attended.created_at) - new Date(session.startedAt)) / 60000;
+  }).filter((value) => Number.isFinite(value));
+  return Math.round(average(values));
+}
+
 function averageCloseMinutes(sessions) {
   const values = sessions
     .filter((session) => session.closedAt)
@@ -2394,6 +2577,13 @@ function averageCloseMinutes(sessions) {
 function average(values) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function toDateKey(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return '';
+  return date.toISOString().slice(0, 10);
 }
 
 function normalizeEmail(value) {
@@ -2422,7 +2612,7 @@ function normalizePushSubscription(subscription) {
 
 function normalizeUserRole(value) {
   const role = String(value || 'attendant').trim().toLowerCase();
-  if (['admin', 'attendant'].includes(role)) return role;
+  if (['admin', 'supervisor', 'attendant'].includes(role)) return role;
   const error = new Error('Perfil de usuario invalido.');
   error.status = 400;
   throw error;

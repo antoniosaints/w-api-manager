@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { api } from '../shared/api.js';
 import { disablePushNotifications, enablePushNotifications } from '../pwa.js';
 
-export function useUserPreferenceActions({ setCurrentUser, showToast, handleError }) {
+export function useUserPreferenceActions({ setCurrentUser, setDevicePushEnabled, showToast, handleError }) {
   const updateUserPreferences = useCallback(async (changes, successMessage = 'Preferencias atualizadas') => {
     try {
       const data = await api('/api/auth/me/preferences', { method: 'PATCH', body: changes });
@@ -26,16 +26,12 @@ export function useUserPreferenceActions({ setCurrentUser, showToast, handleErro
       } else {
         await disablePushNotifications();
       }
-      const data = await api('/api/auth/me/preferences', {
-        method: 'PATCH',
-        body: { pushEnabled: nextEnabled }
-      });
-      setCurrentUser(data.user);
+      setDevicePushEnabled?.(nextEnabled);
       showToast(nextEnabled ? 'Notificacoes ativadas' : 'Notificacoes desativadas');
     } catch (error) {
       handleError(error);
     }
-  }, [handleError, setCurrentUser, showToast]);
+  }, [handleError, setDevicePushEnabled, showToast]);
 
   return {
     updateAccentColor,

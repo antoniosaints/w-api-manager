@@ -5,6 +5,12 @@ import { Badge, Button, Card, Checkbox, Input, Modal, Pagination, SearchField, S
 
 const emptyForm = { name: '', email: '', password: '', role: 'attendant', active: true, sendNameHeader: false, sectorIds: [] };
 
+const ROLE_LABELS = {
+  admin: 'Admin',
+  supervisor: 'Supervisor',
+  attendant: 'Atendente'
+};
+
 export function UsersPanel({ onRefresh, onDeleteUser, onError, showToast, currentUser, sectors = [] }) {
   const [rows, setRows] = useState([]);
   const [meta, setMeta] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
@@ -78,7 +84,7 @@ export function UsersPanel({ onRefresh, onDeleteUser, onError, showToast, curren
 
   const columns = [
     { key: 'name', label: 'Usuario', render: (user) => <div className="table-primary"><strong>{user.name}</strong><small>{user.email}</small></div> },
-    { key: 'role', label: 'Perfil', render: (user) => user.role === 'admin' ? 'Admin' : 'Atendente' },
+    { key: 'role', label: 'Perfil', render: (user) => ROLE_LABELS[user.role] || user.role },
     { key: 'sectors', label: 'Setores', render: (user) => (user.sectors || []).map((sector) => sector.name).join(', ') || '-' },
     { key: 'active', label: 'Status', render: (user) => <Badge tone={user.active ? 'active' : 'inactive'}>{user.active ? 'Ativo' : 'Inativo'}</Badge> },
     {
@@ -109,6 +115,7 @@ export function UsersPanel({ onRefresh, onDeleteUser, onError, showToast, curren
         <Select value={filters.role} onChange={(event) => setFilters({ ...filters, role: event.target.value, page: 1 })}>
           <option value="">Todos perfis</option>
           <option value="admin">Admin</option>
+          <option value="supervisor">Supervisor</option>
           <option value="attendant">Atendente</option>
         </Select>
         <Select value={filters.active} onChange={(event) => setFilters({ ...filters, active: event.target.value, page: 1 })}>
@@ -132,6 +139,7 @@ export function UsersPanel({ onRefresh, onDeleteUser, onError, showToast, curren
             <Input label={modal.mode === 'create' ? 'Senha' : 'Nova senha'} help={modal.mode === 'edit' ? 'Preencha apenas para trocar a senha.' : ''} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} type="password" required={modal.mode === 'create'} />
             <Select label="Perfil" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
               <option value="attendant">Atendente</option>
+              <option value="supervisor">Supervisor</option>
               <option value="admin">Admin</option>
             </Select>
             <div className="option-grid">

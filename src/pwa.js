@@ -39,6 +39,11 @@ export async function enablePushNotifications() {
     applicationServerKey: urlBase64ToUint8Array(publicKey)
   });
 
+  await saveCurrentPushSubscription(subscription);
+  return subscription;
+}
+
+async function saveCurrentPushSubscription(subscription) {
   await api('/api/push/subscribe', {
     method: 'POST',
     body: {
@@ -46,8 +51,6 @@ export async function enablePushNotifications() {
       deviceLabel: describeCurrentDevice()
     }
   });
-
-  return subscription;
 }
 
 export async function disablePushNotifications() {
@@ -71,10 +74,25 @@ export async function disablePushNotifications() {
   return false;
 }
 
-export async function syncPushSubscription(pushEnabled) {
-  if (!pushEnabled || !canUsePushNotifications()) return null;
+export async function syncPushSubscription() {
+  if (!canUsePushNotifications()) return null;
   if (Notification.permission !== 'granted') return null;
-  return enablePushNotifications();
+  const subscription = await getCurrentPushSubscription();
+  if (!subscription) return null;
+  await saveCurrentPushSubscription(subscription);
+  return subscription;
+}
+
+export async function getCurrentPushSubscription() {
+  if (!canUsePushNotifications()) return null;
+  const registration = await registerAppServiceWorker();
+  return await registration?.pushManager.getSubscription() || null;
+}
+
+export async function isPushEnabledForCurrentBrowser() {
+  if (!canUsePushNotifications()) return false;
+  if (Notification.permission !== 'granted') return false;
+  return Boolean(await getCurrentPushSubscription());
 }
 
 export async function setAppUnreadBadge(count) {

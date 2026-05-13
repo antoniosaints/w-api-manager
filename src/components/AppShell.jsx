@@ -11,7 +11,7 @@ import {
   Sun,
   UserCheck
 } from 'lucide-react';
-import { navItems, pageMeta } from '../app/navigation.jsx';
+import { allowedRoles, navItems, pageMeta } from '../app/navigation.jsx';
 import { Button } from './ui/index.js';
 import { Switch } from './ui/Switch.jsx';
 import {
@@ -25,7 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './shadcn/tooltip.jsx';
 
 export function Sidebar({ view, setView, settings, currentUser, collapsed, onToggleCollapsed }) {
-  const items = navItems.filter(([, , , , role]) => !role || currentUser?.role === role);
+  const items = navItems.filter((item) => allowedRoles(item).includes(currentUser?.role));
   return (
     <aside className={collapsed ? 'sidebar collapsed' : 'sidebar'}>
       <div className="brand">
@@ -156,7 +156,7 @@ function ThemeButton({ themePreference, resolvedTheme, onCycleTheme }) {
 }
 
 export function MobileNav({ view, setView, currentUser }) {
-  const items = navItems.filter(([, , , , role]) => !role || currentUser?.role === role);
+  const items = navItems.filter((item) => allowedRoles(item).includes(currentUser?.role));
   return (
     <nav className="mobile-nav" aria-label="Principal mobile">
       {items.map(([key, Icon, label]) => (

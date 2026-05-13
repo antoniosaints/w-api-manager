@@ -8,36 +8,27 @@ import {
   CheckCircle2,
   CircleDot,
   Clock3,
-  CornerUpLeft,
   History,
   Loader2,
   MessageCircle,
-  Mic,
-  Navigation,
-  Paperclip,
-  RotateCcw,
   Search,
   Send,
-  Square,
   Tags,
-  Trash2,
-  UserPlus,
   UserCheck,
   Users,
-  X,
   MessageSquareShareIcon
 } from 'lucide-react';
 import './styles.css';
 import { API, api } from './shared/api.js';
 import { eventToRow, formatTime, getSystemTheme, initials, isConnected, isPlaceholderBody } from './shared/format.js';
-import { buildSupportCountByContact, filterSessionsByPeriod, periodToQuery } from './shared/support.js';
+import { canAccessView } from './app/navigation.jsx';
 import { Sidebar, Header, MobileNav } from './components/AppShell.jsx';
 import {
   MediaModal as ChatMediaModal,
   MessageBubble as ChatMessageBubble
 } from './components/chat/MessageBubble.jsx';
 import { ChatWindow as ChatWindowPanel } from './components/chat/ChatWindow.jsx';
-import { Card, SearchField, Select } from './components/ui/index.js';
+import { Card, Input, Pagination, SearchField, Select } from './components/ui/index.js';
 import { LoginScreen } from './pages/LoginScreen.jsx';
 import { UsersPanel } from './pages/UsersPanel.jsx';
 import { ContactsPanel, ContactModal } from './pages/ContactsPanel.jsx';
@@ -46,11 +37,9 @@ import { ConnectionPanel } from './pages/ConnectionPanel.jsx';
 import { WebhookPanel } from './pages/WebhookPanel.jsx';
 import { SettingsPanel } from './pages/SettingsPanel.jsx';
 import { AgentsPanel } from './pages/AgentsPanel.jsx';
-import { useLaunchRouteSelection, usePushSync, useUnreadAppBadge, readLaunchRoute } from './app/runtime-effects.js';
+import { useDevicePushState, useLaunchRouteSelection, usePushSync, useUnreadAppBadge, readLaunchRoute } from './app/runtime-effects.js';
 import { useUserPreferenceActions } from './app/user-preferences.js';
 import { mergeMessageUpdate } from './app/messages.js';
-import { getMessageMedia } from './media.js';
-import { MEDIA_FILE_ACCEPT, formatBytes, prepareMediaFile, validateMediaFile } from './media-config.js';
 import { registerAppServiceWorker } from './pwa.js';
 import {
   getNextThemePreference,
@@ -103,11 +92,12 @@ function App() {
   const selectedPhone = selectedConversation?.phone || '';
   const resolvedTheme = resolveThemePreference(themePreference, systemTheme);
   const connected = isConnected(status);
+  const { devicePushEnabled, setDevicePushEnabled } = useDevicePushState(currentUser);
   const {
     updateAccentColor,
     updateUserPreferences,
     togglePushNotifications
-  } = useUserPreferenceActions({ setCurrentUser, showToast, handleError });
+  } = useUserPreferenceActions({ setCurrentUser, setDevicePushEnabled, showToast, handleError });
 
   useEffect(() => {
     checkAuth();
@@ -117,6 +107,12 @@ function App() {
   useEffect(() => {
     if (currentUser) loadInitial();
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (currentUser && !canAccessView(view, currentUser.role)) {
+      setView('dashboard');
+    }
+  }, [currentUser?.role, view]);
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -379,6 +375,26 @@ function App() {
     }
   }
 
+  async function openContactFromConversation(conversation) {
+    if (!conversation?.contactId) {
+      setContactDraft({
+        phone: conversation?.phone || '',
+        name: conversation?.name || '',
+        avatarUrl: conversation?.avatarUrl || '',
+        isGroup: Boolean(conversation?.isGroup),
+        source: 'chat'
+      });
+      return;
+    }
+
+    try {
+      const result = await api(`/api/contacts/${conversation.contactId}`);
+      setContactDraft(result.contact);
+    } catch (error) {
+      handleError(error);
+    }
+  }
+
   function showToast(message) {
     setToast(message);
     window.clearTimeout(showToast.timeout);
@@ -421,7 +437,7 @@ function App() {
           themePreference={themePreference}
           resolvedTheme={resolvedTheme}
           accentColor={currentUser?.themeColor || 'green'}
-          pushEnabled={Boolean(currentUser?.pushEnabled)}
+          pushEnabled={devicePushEnabled}
           currentUser={currentUser}
           onRefreshStatus={refreshStatus}
           onCycleTheme={() => setThemePreference((current) => getNextThemePreference(current))}
@@ -434,7 +450,7 @@ function App() {
         <main className="workspace">
           <div className="view-stage">
             {view === 'dashboard' && (
-              <DashboardPanel
+              <DashboardPanelPro
                 conversations={conversations}
                 events={events}
                 connected={connected}
@@ -454,12 +470,13 @@ function App() {
               />
             )}
 
-            {view === 'agents' && currentUser.role === 'admin' && (
+            {view === 'agents' && canAccessView('agents', currentUser.role) && (
               <AgentsPanel
                 settings={settings}
                 setSettings={setSettings}
                 users={users}
                 onError={handleError}
+                currentUser={currentUser}
                 showToast={(message) => {
                   showToast(message);
                   refreshSectorsAndTags().catch(handleError);
@@ -484,6 +501,7 @@ function App() {
                 onTagsChange={updateConversationTags}
                 onSectorChange={updateConversationSector}
                 onSaveContact={(contact) => setContactDraft(contact)}
+                onOpenContact={openContactFromConversation}
                 users={users}
                 sectors={sectors}
                 supportTags={supportTags}
@@ -508,15 +526,16 @@ function App() {
               />
             )}
 
-            {view === 'history' && (
+            {view === 'history' && canAccessView('history', currentUser.role) && (
               <HistoryPanel
-                conversations={conversations}
+                users={users}
+                sectors={sectors}
                 onOpenMedia={setMediaPreview}
                 onError={handleError}
               />
             )}
 
-            {view === 'send' && (
+            {view === 'send' && currentUser.role === 'admin' && (
               <SendPanel
                 initialContact={sendContact}
                 onSent={(message) => {
@@ -569,7 +588,7 @@ function App() {
         <ContactModal
           initialContact={contactDraft}
           onClose={() => setContactDraft(null)}
-          onSaved={() => showToast('Contato salvo')}
+          onSaved={() => refreshConversations(selectedConversationId).catch(handleError)}
           onError={handleError}
           showToast={showToast}
         />
@@ -580,76 +599,78 @@ function App() {
   );
 }
 
-function DashboardPanel({ connected, settings }) {
-  const [periodFilter, setPeriodFilter] = useState('30');
+function DashboardPanelPro({ connected, settings }) {
+  const [filters, setFilters] = useState({ period: '30', from: '', to: '' });
   const [dashboard, setDashboard] = useState(null);
+  const [contactPage, setContactPage] = useState(1);
+  const [eventPage, setEventPage] = useState(1);
 
   useEffect(() => {
-    const query = periodToQuery(periodFilter);
+    const query = buildPeriodQuery(filters);
     api(`/api/dashboard${query}`).then(setDashboard).catch(() => setDashboard(null));
-  }, [periodFilter]);
+  }, [filters.period, filters.from, filters.to]);
 
   const summary = dashboard?.summary || {};
   const status = dashboard?.status || {};
+  const contactRows = paginateRows(dashboard?.byContact || [], contactPage, 5);
+  const eventRows = paginateRows([...(dashboard?.recentTransfers || []), ...(dashboard?.recentEvents || [])], eventPage, 5);
   const cards = [
     { key: 'total', icon: MessageCircle, label: 'Atendimentos', value: summary.total || 0, note: `${summary.unread || 0} nao lidas` },
     { key: 'waiting', icon: BellRing, label: 'Em espera', value: status.waiting || 0, note: 'fila atual' },
     { key: 'active', icon: Activity, label: 'Ativos', value: status.active || 0, note: 'em atendimento' },
-    { key: 'finished', icon: CheckCircle2, label: 'Finalizados', value: status.finished || 0, note: 'no periodo' },
+    { key: 'finished', icon: CheckCircle2, label: 'Finalizados', value: status.finished || 0, note: `${summary.completionRate || 0}% conclusao` },
     { key: 'response', icon: Clock3, label: '1a resposta', value: `${summary.averageFirstResponseMinutes || 0} min`, note: 'media operacional' },
-    { key: 'close', icon: CircleDot, label: 'Fechamento', value: `${summary.averageCloseMinutes || 0} min`, note: 'tempo medio' }
+    { key: 'wait', icon: UserCheck, label: 'Espera', value: `${summary.averageWaitMinutes || 0} min`, note: 'ate assumir' },
+    { key: 'close', icon: CircleDot, label: 'Fechamento', value: `${summary.averageCloseMinutes || 0} min`, note: 'tempo medio' },
+    { key: 'messages', icon: Send, label: 'Mensagens', value: `${summary.inboundMessages || 0}/${summary.outboundMessages || 0}`, note: `${summary.messagesPerSession || 0} por atendimento` },
+    { key: 'transfers', icon: MessageSquareShareIcon, label: 'Transferencias', value: summary.transfers || 0, note: `${summary.reopened || 0} reabertos` }
   ];
+
+  function updateFilter(changes) {
+    setContactPage(1);
+    setEventPage(1);
+    setFilters((current) => ({ ...current, ...changes }));
+  }
 
   return (
     <section className="dashboard-layout">
-      <div className="dashboard-toolbar">
-        <Select className="toolbar-select" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value)}>
+      <div className="dashboard-toolbar dashboard-toolbar-rich">
+        <Select className="toolbar-select" value={filters.period} onChange={(event) => updateFilter({ period: event.target.value })}>
           <option value="7">Ultimos 7 dias</option>
           <option value="30">Ultimos 30 dias</option>
           <option value="90">Ultimos 90 dias</option>
+          <option value="custom">Periodo customizado</option>
           <option value="all">Todo historico</option>
         </Select>
+        {filters.period === 'custom' && (
+          <div className="date-range-controls">
+            <Input label="Inicio" type="date" value={filters.from} onChange={(event) => updateFilter({ from: event.target.value })} />
+            <Input label="Fim" type="date" value={filters.to} onChange={(event) => updateFilter({ to: event.target.value })} />
+          </div>
+        )}
         <span className={connected ? 'status-pill connected' : 'status-pill'}>
           <CircleDot size={15} />
           {connected ? 'Instancia online' : settings?.instanceId || 'Instancia a verificar'}
         </span>
       </div>
 
-      <div className="summary-strip" aria-label="Resumo operacional">
+      <div className="summary-strip dashboard-summary-rich" aria-label="Resumo operacional">
         {cards.map((card) => (
-          <SummaryCard
-            key={card.key}
-            icon={card.icon}
-            label={card.label}
-            value={card.value}
-            note={card.note}
-          />
+          <SummaryCard key={card.key} icon={card.icon} label={card.label} value={card.value} note={card.note} />
         ))}
       </div>
 
-      <div className="dashboard-grid">
-        <Card as="section" variant="panel" className="single-panel dashboard-panel">
+      <div className="dashboard-grid dashboard-grid-rich">
+        <Card as="section" variant="panel" className="single-panel dashboard-panel dashboard-wide">
           <div className="panel-title compact">
             <BarChart3 size={22} />
             <div>
-              <span>Contatos</span>
-              <h1>Top suportes por contato</h1>
-              <p>Quem mais acionou o atendimento no periodo.</p>
+              <span>Timeline</span>
+              <h1>Fluxo por dia</h1>
+              <p>Entradas, saidas e finalizacoes do periodo.</p>
             </div>
           </div>
-          <div className="insight-list">
-            {(dashboard?.byContact || []).map((item) => (
-              <Card as="article" variant="row" key={item.phone}>
-                <ContactAvatar contact={item} />
-                <div>
-                  <strong>{item.name || item.phone}</strong>
-                  <small>{item.finished} finalizados · {item.active} ativos</small>
-                </div>
-                <span className="badge neutral-badge">{item.count}</span>
-              </Card>
-            ))}
-            {!dashboard?.byContact?.length && <p className="empty">Nenhum atendimento no periodo.</p>}
-          </div>
+          <MiniTimelineChart data={dashboard?.timeline || []} />
         </Card>
 
         <Card as="section" variant="panel" className="single-panel dashboard-panel">
@@ -657,104 +678,129 @@ function DashboardPanel({ connected, settings }) {
             <Users size={22} />
             <div>
               <span>Equipe</span>
-              <h1>Suportes por usuario</h1>
-              <p>Responsaveis, carga atual e finalizacoes.</p>
+              <h1>Atendimentos por usuario</h1>
+              <p>Responsaveis, ativos e finalizados.</p>
             </div>
           </div>
-          <div className="insight-list">
-            {(dashboard?.byUser || []).map((item) => (
-              <Card as="article" variant="row" key={item.userId || item.name}>
-                <span className="avatar fallback">{initials(item.name)}</span>
-                <div>
-                  <strong>{item.name}</strong>
-                  <small>{item.active} ativos · {item.finished} finalizados</small>
-                </div>
-                <span className="badge neutral-badge">{item.total}</span>
-              </Card>
-            ))}
-            {!dashboard?.byUser?.length && <p className="empty">Nenhum usuario com suporte no periodo.</p>}
-          </div>
+          <HorizontalBars rows={dashboard?.byUser || []} labelKey="name" valueKey="total" detail={(item) => `${item.active} ativos - ${item.finished} finalizados`} />
         </Card>
 
         <Card as="section" variant="panel" className="single-panel dashboard-panel">
           <div className="panel-title compact">
             <Activity size={22} />
             <div>
-              <span>Carga</span>
-              <h1>Carga atual</h1>
-              <p>Atendimentos abertos por responsavel.</p>
+              <span>Setores</span>
+              <h1>Volume por setor</h1>
+              <p>Distribuicao operacional por fila.</p>
+            </div>
+          </div>
+          <HorizontalBars rows={dashboard?.bySector || []} labelKey="name" valueKey="total" detail={(item) => `${item.waiting} espera - ${item.active} ativos`} />
+        </Card>
+
+        <Card as="section" variant="panel" className="single-panel dashboard-panel">
+          <div className="panel-title compact">
+            <Tags size={22} />
+            <div>
+              <span>Tags</span>
+              <h1>Classificacoes</h1>
+              <p>Marcadores mais usados no periodo.</p>
+            </div>
+          </div>
+          <HorizontalBars rows={dashboard?.byTag || []} labelKey="name" valueKey="total" detail={(item) => `${item.finished} finalizados`} />
+        </Card>
+
+        <Card as="section" variant="panel" className="single-panel dashboard-panel">
+          <div className="panel-title compact">
+            <MessageCircle size={22} />
+            <div>
+              <span>Contatos</span>
+              <h1>Top atendimentos</h1>
+              <p>Clientes que mais acionaram a equipe.</p>
             </div>
           </div>
           <div className="insight-list">
-            {(dashboard?.currentLoad || []).map((item) => (
-              <Card as="article" variant="row" key={item.userId || item.name}>
-                <span className="avatar fallback">{initials(item.name)}</span>
+            {contactRows.data.map((item) => (
+              <Card as="article" variant="row" key={item.phone}>
+                <ContactAvatar contact={item} />
                 <div>
-                  <strong>{item.name}</strong>
-                  <small>{item.waiting} em espera</small>
+                  <strong>{item.name || item.phone}</strong>
+                  <small>{item.finished} finalizados - {item.active} ativos</small>
                 </div>
-                <span className="badge">{item.active}</span>
+                <span className="badge neutral-badge">{item.count}</span>
               </Card>
             ))}
-            {!dashboard?.currentLoad?.length && <p className="empty">Sem carga operacional.</p>}
+            {!dashboard?.byContact?.length && <p className="empty">Nenhum atendimento no periodo.</p>}
           </div>
+          <Pagination meta={contactRows.meta} onPage={setContactPage} />
         </Card>
 
         <Card as="section" variant="panel" className="single-panel dashboard-panel">
           <div className="panel-title compact">
             <Clock3 size={22} />
             <div>
-              <span>Webhooks</span>
-              <h1>Eventos recentes</h1>
-              <p>Eventos e transferencias recentes.</p>
+              <span>Eventos</span>
+              <h1>Timeline recente</h1>
+              <p>Webhooks e transferencias recentes.</p>
             </div>
           </div>
           <div className="insight-list events-compact">
-            {(dashboard?.recentTransfers || []).map((event) => (
-              <Card as="article" variant="row" key={event.id}>
-                <span className="event-dot" />
-                <div>
-                  <strong>{event.body}</strong>
-                  <small>{formatTime(event.createdAt)}</small>
-                </div>
-              </Card>
-            ))}
-            {(dashboard?.recentEvents || []).slice(0, 5).map((event) => (
+            {eventRows.data.map((event) => (
               <Card as="article" variant="row" key={event.id || `${event.eventType}-${event.createdAt}`}>
                 <span className="event-dot" />
                 <div>
-                  <strong>{event.eventType}</strong>
+                  <strong>{event.body || event.eventType}</strong>
                   <small>{formatTime(event.createdAt)}</small>
                 </div>
               </Card>
             ))}
-            {!dashboard?.recentEvents?.length && !dashboard?.recentTransfers?.length && <p className="empty">Nenhum evento recebido ainda.</p>}
+            {!eventRows.data.length && <p className="empty">Nenhum evento recebido ainda.</p>}
           </div>
+          <Pagination meta={eventRows.meta} onPage={setEventPage} />
         </Card>
       </div>
     </section>
   );
 }
 
-function HistoryPanel({ conversations, onOpenMedia, onError }) {
-  const [periodFilter, setPeriodFilter] = useState('all');
-  const [query, setQuery] = useState('');
-  const [selectedHistoryId, setSelectedHistoryId] = useState(conversations[0]?.id || '');
+function HistoryPanel({ users = [], sectors = [], onOpenMedia, onError }) {
+  const [filters, setFilters] = useState({ search: '', status: '', assignedUserId: '', sectorId: '', period: 'all', from: '', to: '', page: 1 });
+  const [rows, setRows] = useState([]);
+  const [meta, setMeta] = useState({ page: 1, limit: 12, total: 0, totalPages: 1 });
+  const [selectedHistoryId, setSelectedHistoryId] = useState('');
   const [historyMessages, setHistoryMessages] = useState([]);
-  const filtered = filterSessionsByPeriod(conversations, periodFilter).filter((item) => {
-    const haystack = `${item.name} ${item.phone} ${item.lastMessage?.body || ''}`.toLowerCase();
-    return haystack.includes(query.toLowerCase());
-  });
-  const selected = filtered.find((item) => item.id === selectedHistoryId) || filtered[0] || null;
+  const selected = rows.find((item) => item.id === selectedHistoryId) || rows[0] || null;
+
+  useEffect(() => {
+    const query = buildHistoryQuery(filters);
+    api(`/api/history/sessions?${query}`)
+      .then((result) => {
+        setRows(result.data || []);
+        setMeta(result.meta || { page: 1, limit: 12, total: 0, totalPages: 1 });
+      })
+      .catch(onError);
+  }, [filters.search, filters.status, filters.assignedUserId, filters.sectorId, filters.period, filters.from, filters.to, filters.page]);
+
+  useEffect(() => {
+    if (!rows.length) {
+      setSelectedHistoryId('');
+      return;
+    }
+    if (!rows.some((item) => item.id === selectedHistoryId)) {
+      setSelectedHistoryId(rows[0].id);
+    }
+  }, [rows, selectedHistoryId]);
 
   useEffect(() => {
     if (!selected?.id) {
       setHistoryMessages([]);
       return;
     }
-    setSelectedHistoryId(selected.id);
     api(`/api/support-sessions/${selected.id}/messages`).then(setHistoryMessages).catch(onError);
   }, [selected?.id]);
+
+  function updateFilters(changes) {
+    setFilters((current) => ({ ...current, ...changes, page: changes.page || 1 }));
+  }
 
   return (
     <section className="history-layout">
@@ -764,20 +810,41 @@ function HistoryPanel({ conversations, onOpenMedia, onError }) {
           <div>
             <span>Historico</span>
             <h1>Atendimentos</h1>
-            <p>Consulta geral de todas as sessoes.</p>
+            <p>Consulta paginada por periodo, setor e responsavel.</p>
           </div>
         </div>
-        <div className="history-filters">
-          <SearchField value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar historico" />
-          <Select className="toolbar-select" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value)}>
+        <div className="history-filters history-filters-advanced">
+          <SearchField value={filters.search} onChange={(event) => updateFilters({ search: event.target.value })} placeholder="Buscar historico" />
+          <Select className="toolbar-select" value={filters.status} onChange={(event) => updateFilters({ status: event.target.value })}>
+            <option value="">Todos status</option>
+            <option value="waiting">Em espera</option>
+            <option value="active">Ativo</option>
+            <option value="finished">Finalizado</option>
+          </Select>
+          <Select className="toolbar-select" value={filters.assignedUserId} onChange={(event) => updateFilters({ assignedUserId: event.target.value })}>
+            <option value="">Todos atendentes</option>
+            {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+          </Select>
+          <Select className="toolbar-select" value={filters.sectorId} onChange={(event) => updateFilters({ sectorId: event.target.value })}>
+            <option value="">Todos setores</option>
+            {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
+          </Select>
+          <Select className="toolbar-select" value={filters.period} onChange={(event) => updateFilters({ period: event.target.value })}>
             <option value="7">Ultimos 7 dias</option>
             <option value="30">Ultimos 30 dias</option>
             <option value="90">Ultimos 90 dias</option>
+            <option value="custom">Periodo especifico</option>
             <option value="all">Todo historico</option>
           </Select>
+          {filters.period === 'custom' && (
+            <div className="date-range-controls">
+              <Input label="Inicio" type="date" value={filters.from} onChange={(event) => updateFilters({ from: event.target.value })} />
+              <Input label="Fim" type="date" value={filters.to} onChange={(event) => updateFilters({ to: event.target.value })} />
+            </div>
+          )}
         </div>
         <div className="conversation-items history-items">
-          {filtered.map((item) => (
+          {rows.map((item) => (
             <button
               key={item.id}
               className={item.id === selected?.id ? 'conversation selected' : 'conversation'}
@@ -786,7 +853,7 @@ function HistoryPanel({ conversations, onOpenMedia, onError }) {
               <ContactAvatar contact={item} />
               <span className="conversation-copy">
                 <strong>{item.name || item.phone}</strong>
-                <small>{getConversationStatusLabel(item.chatStatus)} · {item.messageCount || 0} mensagens</small>
+                <small>{getConversationStatusLabel(item.chatStatus)} - {item.messageCount || 0} mensagens</small>
               </span>
               <span className="conversation-meta">
                 {item.startedAt && <small>{formatTime(item.startedAt)}</small>}
@@ -794,8 +861,9 @@ function HistoryPanel({ conversations, onOpenMedia, onError }) {
               </span>
             </button>
           ))}
-          {!filtered.length && <p className="empty">Nenhum historico encontrado.</p>}
+          {!rows.length && <p className="empty">Nenhum historico encontrado.</p>}
         </div>
+        <Pagination meta={meta} onPage={(page) => updateFilters({ page })} />
       </Card>
 
       <section className="chat-panel">
@@ -805,7 +873,7 @@ function HistoryPanel({ conversations, onOpenMedia, onError }) {
               <ContactAvatar contact={selected} fallback={selected.phone} large />
               <div className="chat-title-copy">
                 <strong>{selected.name || selected.phone}</strong>
-                <small>{selected.phone} · {getConversationStatusLabel(selected.chatStatus)}</small>
+                <small>{selected.phone} - {getConversationStatusLabel(selected.chatStatus)}</small>
               </div>
               <span className="chat-chip">{historyMessages.length} mensagens</span>
             </div>
@@ -848,6 +916,117 @@ function SummaryCard({ icon: Icon, label, value, note }) {
   );
 }
 
+function MiniTimelineChart({ data }) {
+  const width = 640;
+  const height = 180;
+  const max = Math.max(1, ...data.map((item) => item.inbound + item.outbound + item.finished));
+  const points = data.map((item, index) => {
+    const x = data.length <= 1 ? width / 2 : (index / (data.length - 1)) * width;
+    const y = height - ((item.inbound + item.outbound + item.finished) / max) * (height - 24) - 12;
+    return `${x},${y}`;
+  }).join(' ');
+
+  if (!data.length) return <p className="empty">Nenhum dado no periodo.</p>;
+
+  return (
+    <div className="mini-timeline-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline de atendimentos">
+        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        {data.map((item, index) => {
+          const x = data.length <= 1 ? width / 2 : (index / (data.length - 1)) * width;
+          const y = height - ((item.inbound + item.outbound + item.finished) / max) * (height - 24) - 12;
+          return <circle key={item.date} cx={x} cy={y} r="4" />;
+        })}
+      </svg>
+      <div className="timeline-labels">
+        {data.slice(0, 6).map((item) => (
+          <span key={item.date}>{formatShortDate(item.date)}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HorizontalBars({ rows, labelKey, valueKey, detail }) {
+  const max = Math.max(1, ...rows.map((item) => Number(item[valueKey] || 0)));
+  if (!rows.length) return <p className="empty">Nenhum registro no periodo.</p>;
+
+  return (
+    <div className="horizontal-bars">
+      {rows.slice(0, 8).map((item) => {
+        const value = Number(item[valueKey] || 0);
+        return (
+          <div className="horizontal-bar-row" key={item.userId || item.sectorId || item.tagId || item[labelKey]}>
+            <div>
+              <strong>{item[labelKey]}</strong>
+              <small>{detail?.(item)}</small>
+            </div>
+            <span className="horizontal-bar-track"><i style={{ width: `${Math.max(8, (value / max) * 100)}%` }} /></span>
+            <em>{value}</em>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function paginateRows(rows, page, limit) {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safeLimit = Math.max(1, Number(limit) || 5);
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / safeLimit));
+  const start = (safePage - 1) * safeLimit;
+  return {
+    data: rows.slice(start, start + safeLimit),
+    meta: { page: safePage, limit: safeLimit, total, totalPages }
+  };
+}
+
+function buildPeriodQuery(filters) {
+  const params = new URLSearchParams();
+  const period = filters?.period || '30';
+  if (period === 'all') return '';
+  if (period === 'custom') {
+    if (filters.from) params.set('from', startOfLocalDate(filters.from));
+    if (filters.to) params.set('to', endOfLocalDate(filters.to));
+  } else {
+    const days = Number(period || 30);
+    params.set('from', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString());
+    params.set('to', new Date().toISOString());
+  }
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+function buildHistoryQuery(filters) {
+  const params = new URLSearchParams();
+  if (filters.search) params.set('search', filters.search);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.assignedUserId) params.set('assignedUserId', filters.assignedUserId);
+  if (filters.sectorId) params.set('sectorId', filters.sectorId);
+  if (filters.page) params.set('page', String(filters.page));
+  params.set('limit', '12');
+  const periodQuery = buildPeriodQuery(filters).replace(/^\?/, '');
+  if (periodQuery) {
+    for (const [key, value] of new URLSearchParams(periodQuery)) params.set(key, value);
+  }
+  return params.toString();
+}
+
+function startOfLocalDate(value) {
+  return value ? new Date(`${value}T00:00:00`).toISOString() : '';
+}
+
+function endOfLocalDate(value) {
+  return value ? new Date(`${value}T23:59:59.999`).toISOString() : '';
+}
+
+function formatShortDate(value) {
+  if (!value) return '';
+  const [, month, day] = value.split('-');
+  return `${day}/${month}`;
+}
+
 function ContactAvatar({ contact, fallback = '', large = false }) {
   const label = contact?.name || fallback || contact?.phone || '?';
   const avatarUrl = contact?.avatarUrl;
@@ -875,6 +1054,7 @@ function Inbox({
   onTagsChange,
   onSectorChange,
   onSaveContact,
+  onOpenContact,
   users,
   sectors = [],
   supportTags = [],
@@ -972,6 +1152,7 @@ function Inbox({
         onTagsChange={onTagsChange}
         onSectorChange={onSectorChange}
         onSaveContact={onSaveContact}
+        onOpenContact={onOpenContact}
         users={users}
         sectors={sectors}
         supportTags={supportTags}
@@ -990,6 +1171,12 @@ function getEmptyTabCopy(status) {
   return 'Nenhum contato em espera. O webhook recebido vai preencher esta fila.';
 }
 
+function getConversationStatusLabel(status) {
+  if (status === 'active') return 'Ativo';
+  if (status === 'finished') return 'Finalizado';
+  return 'Em espera';
+}
+
 function conversationMatchesTab(item, tab) {
   if (tab === 'groups') return Boolean(item.isGroup);
   return !item.isGroup && (item.chatStatus || 'waiting') === tab;
@@ -1005,485 +1192,6 @@ function ConversationTags({ conversation }) {
       {tags.slice(0, 3).map((tag) => <span key={tag.id} className="tag-pill" data-color={tag.color}>{tag.name}</span>)}
     </span>
   );
-}
-
-function MessageBubble({ message, onOpenMedia, onReply, canReply = false, showSenderName = false }) {
-  if (message.direction === 'system') {
-    return (
-      <article className="system-event">
-        <span>{message.body}</span>
-        <small>{formatTime(message.createdAt)}</small>
-      </article>
-    );
-  }
-
-  const media = getMessageMedia(message);
-  const imageSource = media && ['image', 'sticker'].includes(media.type) ? media.src : '';
-  const hasText = Boolean(message.body && !isPlaceholderBody(message.body));
-  const isSticker = media?.type === 'sticker' || isStickerMessage(message);
-  const mediaLabel = getMessageMediaLabel(message, media);
-  const imageAlt = hasText ? message.body : mediaLabel;
-  const senderLabel = showSenderName && message.direction === 'inbound' && (message.senderName || message.senderPhone)
-    ? message.senderName || message.senderPhone
-    : '';
-
-  return (
-    <article className={`bubble ${message.direction} ${media ? 'with-media' : ''} ${isSticker ? 'is-sticker' : ''} ${media?.type ? `media-${media.type}` : ''}`}>
-      {senderLabel && <span className="message-sender-label">{senderLabel}</span>}
-      {message.replyPreview && (
-        <div className="reply-context">
-          <CornerUpLeft size={14} />
-          <span>{message.replyPreview}</span>
-        </div>
-      )}
-      {imageSource && (
-        <button
-          type="button"
-          className="message-image-button"
-          onClick={() => onOpenMedia?.({ src: imageSource, alt: imageAlt, caption: hasText ? message.body : '' })}
-          title="Abrir imagem"
-        >
-          <img className="message-image" src={imageSource} alt={imageAlt} loading="lazy" />
-        </button>
-      )}
-      {media?.type === 'audio' && (
-        <div className="message-audio">
-          <div className="message-media-heading">
-            <AudioLines size={17} />
-            <span>{media.fileName || 'Audio'}</span>
-          </div>
-          <MediaMeta media={media} />
-        </div>
-      )}
-      {media?.type === 'video' && (
-        <div className="message-video">
-          <video controls preload="metadata" src={media.src}>
-            <a href={media.src}>Abrir video</a>
-          </video>
-          <MediaMeta media={media} />
-        </div>
-      )}
-      {media?.type === 'document' && (
-        <a className="message-document" href={media.src} target="_blank" rel="noreferrer" download={media.fileName || undefined}>
-          <FileText size={22} />
-          <span>
-            <strong>{media.fileName || 'Documento'}</strong>
-            <small>{[formatBytes(media.size), media.mimeType].filter(Boolean).join(' · ') || 'Abrir arquivo'}</small>
-          </span>
-          <Download size={17} />
-        </a>
-      )}
-      {hasText && <p>{message.body}</p>}
-      {!hasText && media && (
-        <p className="media-caption">
-          <MediaLabelIcon type={media.type} size={15} />
-          {mediaLabel}
-        </p>
-      )}
-      <footer>
-        {canReply && (
-          <button
-            type="button"
-            className="message-reply-action"
-            onClick={() => onReply?.(message)}
-            title="Responder esta mensagem"
-          >
-            <CornerUpLeft size={13} />
-            Responder
-          </button>
-        )}
-        <span>{formatTime(message.createdAt)}</span>
-        {message.direction === 'outbound' && <CheckCheck size={14} />}
-      </footer>
-    </article>
-  );
-}
-
-function MediaMeta({ media }) {
-  const details = [formatDuration(media.duration), formatBytes(media.size)].filter(Boolean);
-  if (!details.length) return null;
-  return <small className="message-media-meta">{details.join(' · ')}</small>;
-}
-
-function MediaLabelIcon({ type, size = 16 }) {
-  if (type === 'audio') return <AudioLines size={size} />;
-  if (type === 'video') return <Film size={size} />;
-  if (type === 'document') return <FileText size={size} />;
-  return <ImageIcon size={size} />;
-}
-
-function getMessageMediaLabel(message, media = null) {
-  if (media?.type === 'audio') return 'Audio recebido';
-  if (media?.type === 'video') return 'Video recebido';
-  if (media?.type === 'document') return media.fileName || 'Documento recebido';
-  if (isStickerMessage(message) || media?.type === 'sticker') return 'Figurinha';
-  return 'Imagem recebida';
-}
-
-function isStickerMessage(message) {
-  return Boolean(
-    message?.type === 'sticker'
-      || message?.raw?.msgContent?.stickerMessage
-      || message?.raw?.message?.stickerMessage
-  );
-}
-
-function MediaModal({ media, onClose }) {
-  useEffect(() => {
-    function handleKeyDown(event) {
-      if (event.key === 'Escape') onClose();
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className="media-modal" role="dialog" aria-modal="true" aria-label="Imagem recebida" onClick={onClose}>
-      <div className="media-modal-panel" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className="media-modal-close" onClick={onClose} title="Fechar imagem">
-          <X size={20} />
-        </button>
-        <img src={media.src} alt={media.alt || 'Imagem recebida'} />
-        {media.caption && <p className="media-modal-caption">{media.caption}</p>}
-      </div>
-    </div>
-  );
-}
-
-function ChatWindow({
-  selectedConversation,
-  messages,
-  loadingMessages = false,
-  onOpenMedia,
-  onAttend,
-  onReopen,
-  onFinish,
-  onDelete,
-  onTransfer,
-  onTagsChange,
-  onSectorChange,
-  onSaveContact,
-  users = [],
-  sectors = [],
-  supportTags = [],
-  currentUser,
-  onSent,
-  onError
-}) {
-  const [draft, setDraft] = useState('');
-  const [mediaDraft, setMediaDraft] = useState(null);
-  const [mediaProgress, setMediaProgress] = useState(0);
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [transferTarget, setTransferTarget] = useState('');
-  const [sending, setSending] = useState(false);
-  const bottomRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const chatStatus = selectedConversation?.chatStatus || 'waiting';
-  const selectedSessionId = selectedConversation?.id || '';
-  const selectedPhone = selectedConversation?.phone || '';
-  const canReply = chatStatus === 'active';
-  const transferUsers = users.filter((user) => user.active && user.id !== currentUser?.id);
-  const currentTagIds = (selectedConversation?.tags || []).map((tag) => tag.id);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, selectedSessionId]);
-
-  useEffect(() => {
-    setDraft('');
-    setMediaDraft(null);
-    setMediaProgress(0);
-    setReplyingTo(null);
-    setTransferTarget('');
-  }, [selectedSessionId]);
-
-  async function submit(event) {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!selectedPhone || (!text && !mediaDraft) || !canReply) return;
-    setSending(true);
-    try {
-      const result = await api('/api/messages/send', {
-        method: 'POST',
-        body: {
-          phone: selectedPhone,
-          message: text,
-          sessionId: selectedSessionId,
-          media: mediaDraft ? {
-            type: mediaDraft.type,
-            dataUrl: mediaDraft.dataUrl,
-            name: mediaDraft.name,
-            mimeType: mediaDraft.mimeType,
-            size: mediaDraft.size,
-            extension: mediaDraft.extension
-          } : null,
-          replyToMessageId: replyingTo?.id || '',
-          replyToExternalId: replyingTo?.externalId || '',
-          replyPreview: replyingTo ? buildReplyPreview(replyingTo) : ''
-        }
-      });
-      setDraft('');
-      setMediaDraft(null);
-      setMediaProgress(0);
-      setReplyingTo(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      onSent(result.message);
-    } catch (error) {
-      onError(error);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  function handleComposerKeyDown(event) {
-    if (event.key === 'Enter' && event.ctrlKey) {
-      event.preventDefault();
-      insertTextareaValue(event.currentTarget, '\n', setDraft);
-      return;
-    }
-
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      event.currentTarget.form?.requestSubmit();
-    }
-  }
-
-  async function handleMediaSelection(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const validation = validateMediaFile(file);
-      if (!validation.valid) throw new Error(validation.message);
-      setMediaProgress(4);
-      const prepared = await prepareMediaFile(file, { onProgress: setMediaProgress });
-      setMediaDraft(prepared);
-    } catch (error) {
-      onError(error instanceof Error ? error : new Error('Nao foi possivel ler a midia selecionada.'));
-      setMediaProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  }
-
-  if (!selectedPhone) {
-    return (
-      <section className="chat-panel empty-state">
-        <MessageCircle size={42} />
-        <h1>Atendimento em tempo real</h1>
-        <p>Quando a W-API chamar o webhook de recebimento, a conversa aparece aqui automaticamente.</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="chat-panel">
-      <div className="chat-header justify-between">
-        <div className="flex items-center gap-2">
-        <ContactAvatar contact={selectedConversation} fallback={selectedPhone} large />
-        <div className="chat-title-copy">
-          <strong>{selectedConversation?.name || selectedPhone}</strong>
-          <ConversationTags conversation={selectedConversation} />
-          <small>{selectedPhone} · {getConversationStatusLabel(chatStatus)}</small>
-        </div>
-        </div>
-        <div className="chat-actions">
-          <label className="transfer-control">
-            <Tags size={16} />
-            <select value="" onChange={(event) => {
-              const tagId = event.target.value;
-              if (tagId && !currentTagIds.includes(tagId)) onTagsChange?.(selectedSessionId, [...currentTagIds, tagId]);
-            }} title="Adicionar tag">
-              <option value="">Tag</option>
-              {supportTags.filter((tag) => tag.active && !currentTagIds.includes(tag.id)).map((tag) => (
-                <option key={tag.id} value={tag.id}>{tag.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="transfer-control">
-            <Navigation size={16} />
-            <select value={selectedConversation?.sectorId || ''} onChange={(event) => onSectorChange?.(selectedSessionId, event.target.value)} title="Setor do atendimento">
-              <option value="">Setor</option>
-              {sectors.filter((sector) => sector.active).map((sector) => (
-                <option key={sector.id} value={sector.id}>{sector.name}</option>
-              ))}
-            </select>
-          </label>
-          {chatStatus === 'waiting' && (
-            <button type="button" className="secondary-action compact-action" onClick={() => onAttend(selectedSessionId)}>
-              <UserCheck size={17} />
-              Atender
-            </button>
-          )}
-          {chatStatus === 'finished' && (
-            <button type="button" className="secondary-action compact-action" onClick={() => onReopen(selectedSessionId)}>
-              <RotateCcw size={17} />
-              Reabrir
-            </button>
-          )}
-          {chatStatus === 'active' && (
-            <>
-              <label className="transfer-control">
-                <Users size={16} />
-                <select value={transferTarget} onChange={(event) => setTransferTarget(event.target.value)} title="Transferir atendimento">
-                  <option value="">Transferir</option>
-                  {transferUsers.map((user) => (
-                    <option key={user.id} value={`user:${user.id}`}>{user.name}</option>
-                  ))}
-                  {sectors.filter((sector) => sector.active).map((sector) => (
-                    <option key={sector.id} value={`sector:${sector.id}`}>Setor: {sector.name}</option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="secondary-action compact-action"
-                disabled={!transferTarget}
-                onClick={() => onTransfer?.(selectedSessionId, transferTarget)}
-              >
-                <MessageSquareShareIcon size={17} />
-              </button>
-              <button type="button" className="secondary-action compact-action" onClick={() => onFinish(selectedSessionId)}>
-                <CheckCircle2 size={17} />
-                Finalizar
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            className="secondary-action compact-action"
-            onClick={() => onSaveContact?.({
-              phone: selectedPhone,
-              name: selectedConversation?.name || '',
-              avatarUrl: selectedConversation?.avatarUrl || '',
-              isGroup: Boolean(selectedConversation?.isGroup),
-              source: 'chat'
-            })}
-          >
-            <UserPlus size={17} />
-          </button>
-          <button type="button" className="secondary-action compact-action danger-action" onClick={() => onDelete(selectedSessionId)}>
-            <Trash2 size={17} />
-          </button>
-        </div>
-      </div>
-
-      <div className="message-stream">
-        {loadingMessages ? (
-          <div className="chat-loading">
-            <Loader2 className="spin" size={22} />
-            <span>Carregando mensagens</span>
-          </div>
-        ) : messages.length ? messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            onOpenMedia={onOpenMedia}
-            onReply={setReplyingTo}
-            canReply={canReply}
-            showSenderName={Boolean(selectedConversation?.isGroup)}
-          />
-        )) : <p className="empty stream-empty">Nenhuma mensagem carregada para esta conversa.</p>}
-        <div ref={bottomRef} />
-      </div>
-
-      <form className="composer composer-shell" onSubmit={submit}>
-        {(replyingTo || mediaDraft || mediaProgress > 0) && (
-          <div className="composer-preview">
-            <div>
-              {replyingTo && (
-                <span>
-                  <CornerUpLeft size={15} />
-                  Respondendo: {buildReplyPreview(replyingTo)}
-                </span>
-              )}
-              {mediaDraft && (
-                <span>
-                  <MediaLabelIcon type={mediaDraft.type} size={15} />
-                  {mediaDraft.name}
-                  {mediaDraft.size ? ` · ${formatBytes(mediaDraft.size)}` : ''}
-                  {mediaDraft.compressed ? ' · comprimida' : ''}
-                </span>
-              )}
-              {!mediaDraft && mediaProgress > 0 && (
-                <span>
-                  <Loader2 className="spin" size={15} />
-                  Preparando midia {mediaProgress}%
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setReplyingTo(null);
-                setMediaDraft(null);
-                setMediaProgress(0);
-                if (fileInputRef.current) fileInputRef.current.value = '';
-              }}
-              title="Limpar anexos"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
-        <input
-          ref={fileInputRef}
-          className="sr-only"
-          type="file"
-          accept={MEDIA_FILE_ACCEPT}
-          onChange={handleMediaSelection}
-          disabled={!canReply || sending}
-        />
-        <div className="composer-bar">
-          <button
-            type="button"
-            className="attach-button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!canReply || sending}
-            title="Anexar midia"
-          >
-            <Paperclip size={21} />
-          </button>
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={handleComposerKeyDown}
-            placeholder={canReply ? 'Digite uma mensagem' : 'Atenda o contato para responder'}
-            disabled={!canReply}
-            rows={1}
-          />
-          <button className="send-button" disabled={sending || (!draft.trim() && !mediaDraft) || !canReply} title="Enviar resposta">
-            {sending ? <Loader2 className="spin" size={20} /> : <Send size={20} />}
-          </button>
-        </div>
-      </form>
-    </section>
-  );
-}
-
-function getConversationStatusLabel(status) {
-  if (status === 'active') return 'Ativo';
-  if (status === 'finished') return 'Finalizado';
-  return 'Em espera';
-}
-
-function buildReplyPreview(message) {
-  if (!message) return '';
-  const text = !isPlaceholderBody(message.body) ? message.body : '';
-  const media = getMessageMedia(message);
-  const fallback = media ? getMessageMediaLabel(message, media).replace(' recebido', '') : 'Mensagem';
-  return String(text || fallback).replace(/\s+/g, ' ').trim().slice(0, 140);
-}
-
-function insertTextareaValue(textarea, value, setValue) {
-  const start = textarea.selectionStart ?? textarea.value.length;
-  const end = textarea.selectionEnd ?? textarea.value.length;
-  const next = `${textarea.value.slice(0, start)}${value}${textarea.value.slice(end)}`;
-  setValue(next);
-  requestAnimationFrame(() => {
-    textarea.selectionStart = start + value.length;
-    textarea.selectionEnd = start + value.length;
-  });
 }
 
 createRoot(document.getElementById('root')).render(<App />);

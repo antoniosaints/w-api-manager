@@ -8,10 +8,10 @@ const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url),
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 test('chat image preview opens through an in-app modal trigger', () => {
-  assert.match(mainSource, /function MediaModal/);
-  assert.match(mainSource, /className="message-image-button"/);
-  assert.match(mainSource, /onOpenMedia\?\./);
-  assert.doesNotMatch(mainSource, /className="message-image-link"/);
+  assert.match(messageBubbleSource, /function MediaModal/);
+  assert.match(messageBubbleSource, /className="message-image-button"/);
+  assert.match(messageBubbleSource, /onOpenMedia\?\./);
+  assert.doesNotMatch(messageBubbleSource, /className="message-image-link"/);
 });
 
 test('chat image preview is size-limited and has modal styles', () => {
@@ -22,17 +22,17 @@ test('chat image preview is size-limited and has modal styles', () => {
 });
 
 test('sticker messages use a smaller bubble and a concise label', () => {
-  assert.match(mainSource, /isStickerMessage\(message\)/);
-  assert.match(mainSource, /Figurinha/);
+  assert.match(messageBubbleSource, /isStickerMessage\(message\)/);
+  assert.match(messageBubbleSource, /Figurinha/);
   assert.match(stylesSource, /\.bubble\.is-sticker[\s\S]*width:\s*min\(180px,\s*42%\)/);
   assert.match(stylesSource, /\.bubble\.is-sticker \.message-image[\s\S]*max-height:\s*156px/);
 });
 
 test('chat renders audio, video and document media with dedicated controls', () => {
-  assert.match(mainSource, /getMessageMedia\(message\)/);
-  assert.match(mainSource, /className="message-audio"/);
-  assert.match(mainSource, /className="message-video"/);
-  assert.match(mainSource, /className="message-document"/);
+  assert.match(messageBubbleSource, /getMessageMedia\(message\)/);
+  assert.match(messageBubbleSource, /className="message-audio"/);
+  assert.match(messageBubbleSource, /className="message-video"/);
+  assert.match(messageBubbleSource, /className="message-document"/);
   assert.match(stylesSource, /\.message-audio/);
   assert.match(stylesSource, /\.message-video/);
   assert.match(stylesSource, /\.message-document/);

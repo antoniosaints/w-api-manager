@@ -5,12 +5,13 @@ import { mergeMessageUpdate } from '../src/app/messages.js';
 import { getMessageMedia } from '../src/media.js';
 
 const mainSource = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
+const messagesSource = readFileSync(new URL('../src/app/messages.js', import.meta.url), 'utf8');
 const viteConfig = readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');
 
 test('message updates replace existing local bubbles by id or external id', () => {
   assert.match(mainSource, /mergeMessageUpdate/);
-  assert.match(mainSource, /externalId/);
-  assert.doesNotMatch(mainSource, /setMessages\(\(current\) => appendUnique\(current, message\)\)/);
+  assert.match(messagesSource, /externalId/);
+  assert.doesNotMatch(messagesSource, /appendUnique/);
 });
 
 test('dev server proxies uploaded media paths used by chat previews', () => {
