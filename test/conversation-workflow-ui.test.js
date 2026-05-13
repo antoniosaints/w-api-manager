@@ -14,6 +14,7 @@ const serverSource = readFileSync(new URL('../server/index.js', import.meta.url)
 const pwaSource = readFileSync(new URL('../src/pwa.js', import.meta.url), 'utf8');
 const runtimeSource = readFileSync(new URL('../src/app/runtime-effects.js', import.meta.url), 'utf8');
 const serviceWorkerSource = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
+const packageSource = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
 const shellSourceWithIndex = [shellSource, readFileSync(new URL('../index.html', import.meta.url), 'utf8')].join('\n');
 const cssSource = stylesSource;
 const appSource = [mainSource, apiSource, shellSource, settingsSource].join('\n');
@@ -63,6 +64,21 @@ test('history menu and dashboard support metrics are wired', () => {
   assert.match(mainSource, /HistoryPanel/);
   assert.match(mainSource, /buildHistoryQuery/);
   assert.match(mainSource, /Atendimentos por usuario/);
+});
+
+test('dashboard renders compact Chart.js analytics cards', () => {
+  assert.match(packageSource, /"chart\.js"/);
+  assert.match(mainSource, /from 'chart\.js\/auto'/);
+  assert.match(mainSource, /ChartCanvas/);
+  assert.match(mainSource, /TimelineChart/);
+  assert.match(mainSource, /BarRankChart/);
+  assert.match(mainSource, /StatusDistributionChart/);
+  assert.doesNotMatch(mainSource, /function MiniTimelineChart/);
+  assert.doesNotMatch(mainSource, /function HorizontalBars/);
+  assert.doesNotMatch(mainSource, /dashboard-wide/);
+  assert.match(stylesSource, /\.chart-shell/);
+  assert.match(stylesSource, /height:\s*220px/);
+  assert.match(stylesSource, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
 });
 
 test('auth, users, transfer and dashboard screens are wired in the UI', () => {
