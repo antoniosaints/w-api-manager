@@ -8,6 +8,8 @@ export function findMessageImageSource(message) {
   if (message.direction === 'outbound' && isLocalMediaPath(message.mediaPath)) {
     return toImageSource(message.mediaPath, image.mimetype);
   }
+  const localRawSource = [image.url, image.mediaUrl, image.link].find(isLocalMediaPath);
+  if (localRawSource) return toImageSource(localRawSource, image.mimetype);
   if (message.id && image.url && image.mediaKey) return `/api/messages/${encodeURIComponent(message.id)}/media`;
 
   if (message.previewImage || (message.type === 'image' && message.previewMedia)) {

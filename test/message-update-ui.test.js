@@ -57,3 +57,78 @@ test('message updates keep local outbound image preview when later status payloa
   assert.equal(merged.raw.normalizedMedia.mediaKey, 'remote-key');
   assert.equal(getMessageMedia(merged).src, '/uploads/outbound/local-image.jpg');
 });
+
+test('message updates keep fallback preview image when mediaPath is absent', () => {
+  const current = {
+    id: 'preview-image',
+    externalId: 'wapi-image-2',
+    direction: 'outbound',
+    type: 'image',
+    body: 'Imagem enviada',
+    mediaPath: null,
+    previewImage: '/uploads/outbound/preview-image.jpg',
+    previewMedia: '/uploads/outbound/preview-image.jpg'
+  };
+  const update = {
+    id: 'preview-image',
+    externalId: 'wapi-image-2',
+    direction: 'outbound',
+    type: 'image',
+    body: 'Imagem enviada',
+    mediaPath: null,
+    previewImage: '',
+    previewMedia: '',
+    raw: {
+      normalizedMedia: {
+        type: 'image',
+        url: '',
+        mimetype: 'image/jpeg'
+      }
+    }
+  };
+
+  const [merged] = mergeMessageUpdate([current], update);
+
+  assert.equal(merged.previewImage, '/uploads/outbound/preview-image.jpg');
+  assert.equal(merged.previewMedia, '/uploads/outbound/preview-image.jpg');
+  assert.equal(getMessageMedia(merged).src, '/uploads/outbound/preview-image.jpg');
+});
+
+test('message updates keep raw local image preview when status update has no local source', () => {
+  const current = {
+    id: 'raw-image',
+    externalId: 'wapi-image-3',
+    direction: 'outbound',
+    type: 'image',
+    body: 'Imagem enviada',
+    mediaPath: null,
+    raw: {
+      normalizedMedia: {
+        type: 'image',
+        url: '/uploads/outbound/raw-image.jpg',
+        mimetype: 'image/jpeg'
+      }
+    }
+  };
+  const update = {
+    id: 'raw-image',
+    externalId: 'wapi-image-3',
+    direction: 'outbound',
+    type: 'image',
+    body: 'Imagem enviada',
+    raw: {
+      normalizedMedia: {
+        type: 'image',
+        url: '',
+        mimetype: 'image/jpeg',
+        mediaKey: 'status-key'
+      }
+    }
+  };
+
+  const [merged] = mergeMessageUpdate([current], update);
+
+  assert.equal(merged.raw.normalizedMedia.url, '/uploads/outbound/raw-image.jpg');
+  assert.equal(merged.raw.normalizedMedia.mediaKey, 'status-key');
+  assert.equal(getMessageMedia(merged).src, '/uploads/outbound/raw-image.jpg');
+});

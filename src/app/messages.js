@@ -12,13 +12,25 @@ function isSameMessageUpdate(current, item) {
 }
 
 function mergeMessage(current, item) {
-  const keepLocalMediaPath = shouldKeepLocalOutboundPreview(current, item);
-  const mediaPath = keepLocalMediaPath ? current.mediaPath : item.mediaPath ?? current.mediaPath;
+  const preservedPreview = shouldKeepLocalOutboundPreview(current, item)
+    ? getLocalPreviewSource(current)
+    : '';
+  const mediaPath = preservedPreview && isLocalUploadPath(current.mediaPath)
+    ? current.mediaPath
+    : item.mediaPath ?? current.mediaPath;
+  const previewImage = preservedPreview && !isLocalUploadPath(item.previewImage)
+    ? current.previewImage || preservedPreview
+    : item.previewImage ?? current.previewImage;
+  const previewMedia = preservedPreview && !isLocalUploadPath(item.previewMedia)
+    ? current.previewMedia || preservedPreview
+    : item.previewMedia ?? current.previewMedia;
   return {
     ...current,
     ...item,
     mediaPath,
-    raw: mergeMessageRaw(current.raw, item.raw, keepLocalMediaPath ? current.mediaPath : '')
+    previewImage,
+    previewMedia,
+    raw: mergeMessageRaw(current.raw, item.raw, preservedPreview)
   };
 }
 
@@ -49,8 +61,20 @@ function mergeMessageRaw(currentRaw = {}, nextRaw = {}, preservedMediaPath = '')
 function shouldKeepLocalOutboundPreview(current = {}, item = {}) {
   return current.direction === 'outbound'
     && ['image', 'sticker'].includes(current.type)
-    && isLocalUploadPath(current.mediaPath)
-    && !isLocalUploadPath(item.mediaPath);
+    && Boolean(getLocalPreviewSource(current))
+    && !getLocalPreviewSource(item);
+}
+
+function getLocalPreviewSource(message = {}) {
+  const media = message.raw?.normalizedMedia || {};
+  return [
+    message.mediaPath,
+    message.previewImage,
+    message.previewMedia,
+    media.url,
+    media.mediaUrl,
+    media.link
+  ].find(isLocalUploadPath) || '';
 }
 
 function isLocalUploadPath(value) {
