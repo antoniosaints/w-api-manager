@@ -10,13 +10,13 @@
   "theme_color": "#247c5a",
   "icons": [
     {
-      "src": "/ura-logo.png",
+      "src": "/ura_192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/ura-logo.png",
+      "src": "/ura_512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

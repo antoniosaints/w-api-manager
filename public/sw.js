@@ -43,6 +43,7 @@ self.addEventListener('push', (event) => {
       return;
     }
 
+    await setAppBadgeCount(payload.unreadCount);
     await self.registration.showNotification(payload.title || 'URA Atendimento', {
       body: payload.body || 'Nova mensagem recebida',
       icon: payload.icon || '/ura-logo.png',
@@ -68,6 +69,21 @@ self.addEventListener('notificationclick', (event) => {
     await self.clients.openWindow(targetUrl);
   })());
 });
+
+async function setAppBadgeCount(count) {
+  const unreadCount = Math.max(0, Math.floor(Number(count) || 0));
+  try {
+    if (unreadCount > 0 && 'setAppBadge' in self.registration) {
+      await self.registration.setAppBadge(unreadCount);
+      return;
+    }
+    if (unreadCount <= 0 && 'clearAppBadge' in self.registration) {
+      await self.registration.clearAppBadge();
+    }
+  } catch {
+    // Badge support varies by OS/browser and must never block notifications.
+  }
+}
 
 function safeJson(value) {
   try {

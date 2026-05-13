@@ -46,7 +46,7 @@ import { ConnectionPanel } from './pages/ConnectionPanel.jsx';
 import { WebhookPanel } from './pages/WebhookPanel.jsx';
 import { SettingsPanel } from './pages/SettingsPanel.jsx';
 import { AgentsPanel } from './pages/AgentsPanel.jsx';
-import { useLaunchRouteSelection, usePushSync, readLaunchRoute } from './app/runtime-effects.js';
+import { useLaunchRouteSelection, usePushSync, useUnreadAppBadge, readLaunchRoute } from './app/runtime-effects.js';
 import { useUserPreferenceActions } from './app/user-preferences.js';
 import { getMessageMedia } from './media.js';
 import { MEDIA_FILE_ACCEPT, formatBytes, prepareMediaFile, validateMediaFile } from './media-config.js';
@@ -137,6 +137,7 @@ function App() {
   }, [sidebarCollapsed]);
 
   usePushSync(currentUser);
+  useUnreadAppBadge({ currentUser, conversations });
   useLaunchRouteSelection({
     launchRouteRef,
     currentUser,

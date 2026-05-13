@@ -1,11 +1,23 @@
 import { useEffect } from 'react';
-import { syncPushSubscription } from '../pwa.js';
+import { setAppUnreadBadge, syncPushSubscription } from '../pwa.js';
 
 export function usePushSync(currentUser) {
   useEffect(() => {
     if (!currentUser?.pushEnabled) return;
     syncPushSubscription(true).catch(() => null);
   }, [currentUser?.id, currentUser?.pushEnabled]);
+}
+
+export function useUnreadAppBadge({ currentUser, conversations }) {
+  useEffect(() => {
+    if (!currentUser) {
+      setAppUnreadBadge(0).catch(() => null);
+      return;
+    }
+
+    const unreadCount = conversations.reduce((total, item) => total + Number(item.unreadCount || 0), 0);
+    setAppUnreadBadge(unreadCount).catch(() => null);
+  }, [currentUser?.id, conversations]);
 }
 
 export function useLaunchRouteSelection({ launchRouteRef, currentUser, conversations, setView, setSelectedConversationId }) {

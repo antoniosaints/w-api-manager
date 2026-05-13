@@ -11,6 +11,7 @@ const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url),
 const serverSource = readFileSync(new URL('../server/index.js', import.meta.url), 'utf8');
 const pwaSource = readFileSync(new URL('../src/pwa.js', import.meta.url), 'utf8');
 const runtimeSource = readFileSync(new URL('../src/app/runtime-effects.js', import.meta.url), 'utf8');
+const serviceWorkerSource = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 const shellSourceWithIndex = [shellSource, readFileSync(new URL('../index.html', import.meta.url), 'utf8')].join('\n');
 const cssSource = stylesSource;
 const appSource = [mainSource, apiSource, shellSource, settingsSource].join('\n');
@@ -222,6 +223,23 @@ test('push notifications deep-link the app back into inbox conversations', () =>
   assert.match(runtimeSource, /readLaunchRoute/);
   assert.match(runtimeSource, /clearLaunchRoute/);
   assert.match(runtimeSource, /params\.get\('session'\)/);
+});
+
+test('installed pwa taskbar badge follows unread conversation count', () => {
+  assert.match(pwaSource, /setAppUnreadBadge/);
+  assert.match(pwaSource, /navigator\.setAppBadge/);
+  assert.match(pwaSource, /navigator\.clearAppBadge/);
+  assert.match(runtimeSource, /useUnreadAppBadge/);
+  assert.match(runtimeSource, /conversations\.reduce\(\(total, item\) => total \+ Number\(item\.unreadCount \|\| 0\), 0\)/);
+  assert.match(mainSource, /useUnreadAppBadge\(\{ currentUser, conversations \}\)/);
+});
+
+test('service worker keeps installed pwa badge in sync with push notifications', () => {
+  assert.match(serviceWorkerSource, /setAppBadgeCount/);
+  assert.match(serviceWorkerSource, /self\.registration\.setAppBadge/);
+  assert.match(serviceWorkerSource, /self\.registration\.clearAppBadge/);
+  assert.match(serviceWorkerSource, /payload\.unreadCount/);
+  assert.match(serviceWorkerSource, /notificationclick/);
 });
 
 test('chat bubbles use WhatsApp-like compact tails and spacing', () => {

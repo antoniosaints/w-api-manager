@@ -77,6 +77,26 @@ export async function syncPushSubscription(pushEnabled) {
   return enablePushNotifications();
 }
 
+export async function setAppUnreadBadge(count) {
+  if (typeof navigator === 'undefined') return false;
+
+  const unreadCount = normalizeAppBadgeCount(count);
+  try {
+    if (unreadCount > 0 && 'setAppBadge' in navigator) {
+      await navigator.setAppBadge(unreadCount);
+      return true;
+    }
+    if (unreadCount <= 0 && 'clearAppBadge' in navigator) {
+      await navigator.clearAppBadge();
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
 function describeCurrentDevice() {
   if (typeof window === 'undefined') return '';
   const ua = window.navigator.userAgent || '';
@@ -92,4 +112,8 @@ function urlBase64ToUint8Array(base64String) {
   const base64 = `${base64String}${padding}`.replace(/-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
+function normalizeAppBadgeCount(count) {
+  return Math.max(0, Math.floor(Number(count) || 0));
 }

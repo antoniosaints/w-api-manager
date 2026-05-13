@@ -2,6 +2,8 @@ import webpush from 'web-push';
 import {
   deletePushSubscription,
   getPushConfiguration,
+  getUserById,
+  listConversations,
   listPushSubscriptionsForSession,
   savePushConfiguration
 } from './db.js';
@@ -24,12 +26,14 @@ export async function sendPushForMessage(message) {
   }
 
   ensurePushConfiguration();
-  const payload = JSON.stringify(buildPushPayload(message));
   let sent = 0;
   let removed = 0;
 
   const results = await Promise.allSettled(subscriptions.map(async (subscription) => {
     try {
+      const payload = JSON.stringify(buildPushPayload(message, {
+        unreadCount: getUnreadCountForUser(subscription.userId)
+      }));
       await webpush.sendNotification({
         endpoint: subscription.endpoint,
         keys: subscription.keys
@@ -73,19 +77,27 @@ function ensurePushConfiguration() {
   return { publicKey, privateKey, subject };
 }
 
-function buildPushPayload(message) {
+export function buildPushPayload(message, { unreadCount = 0 } = {}) {
   return {
-    title: message.name || message.phone || 'Nova mensagem recebida',
+    title: resolvePushTitle(message),
     body: buildMessageBody(message),
     icon: '/ura-logo.png',
     badge: '/ura-logo.png',
     tag: `session:${message.sessionId}`,
+    unreadCount: normalizeUnreadCount(unreadCount),
     data: {
       sessionId: message.sessionId,
       phone: message.phone || '',
       url: `/?view=inbox&session=${encodeURIComponent(message.sessionId)}`
     }
   };
+}
+
+function resolvePushTitle(message) {
+  const name = String(message?.name || '').trim();
+  const phone = String(message?.phone || '').trim();
+  if (name && name !== phone) return name;
+  return phone || 'Nova mensagem recebida';
 }
 
 function buildMessageBody(message) {
@@ -99,4 +111,14 @@ function buildMessageBody(message) {
     document: 'Documento recebido',
     sticker: 'Figurinha recebida'
   }[message.type] || 'Nova mensagem recebida';
+}
+
+function getUnreadCountForUser(userId) {
+  const viewer = getUserById(userId);
+  if (!viewer) return 0;
+  return listConversations({ viewer }).reduce((total, item) => total + Number(item.unreadCount || 0), 0);
+}
+
+function normalizeUnreadCount(count) {
+  return Math.max(0, Math.floor(Number(count) || 0));
 }
