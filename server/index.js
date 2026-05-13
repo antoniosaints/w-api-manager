@@ -16,6 +16,7 @@ import {
   buildSupportMetrics,
   deleteContact,
   deleteAiAgent,
+  deletePushSubscription,
   deleteSupportSession,
   deleteAuthSession,
   deleteSector,
@@ -39,6 +40,7 @@ import {
   markSupportSessionRead,
   publicSettings,
   reopenSupportSession,
+  savePushSubscription,
   saveSettings,
   saveContact,
   saveWebhookEvent,
@@ -72,6 +74,7 @@ import { applyMessageNameHeader } from './outbound-message.js';
 import { loadOutboundUploadAsDataUrl, persistOutboundMediaBuffer, persistOutboundMediaReference } from './outbound-storage.js';
 import { normalizePaymentStatus } from './payment.js';
 import { isGroupPayload, isReactionPayload, normalizeIncomingMessage, normalizeWebhookBatch } from './normalize.js';
+import { getPushPublicKey, sendPushForMessage } from './push.js';
 import { runAutomaticAgentForMessage } from './ai-agents.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -126,12 +129,37 @@ app.patch('/api/auth/me/preferences', (req, res) => {
   if (Object.prototype.hasOwnProperty.call(req.body || {}, 'themeColor')) {
     changes.themeColor = req.body.themeColor;
   }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'pushEnabled')) {
+    changes.pushEnabled = req.body.pushEnabled;
+  }
   const user = Object.keys(changes).length === 1 && Object.prototype.hasOwnProperty.call(changes, 'themeColor')
     ? updateUserThemeColor(req.user.id, changes.themeColor)
     : updateUser(req.user.id, changes);
   if (!user) return res.status(404).json({ message: 'Usuario nao encontrado.' });
   req.user = user;
   res.json({ user });
+});
+
+app.get('/api/push/public-key', (req, res) => {
+  res.json({ publicKey: getPushPublicKey() });
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+  const saved = savePushSubscription({
+    userId: req.user.id,
+    subscription: req.body?.subscription,
+    userAgent: req.get('user-agent') || '',
+    deviceLabel: req.body?.deviceLabel || ''
+  });
+  res.status(201).json({ subscription: saved });
+});
+
+app.post('/api/push/unsubscribe', (req, res) => {
+  const removed = deletePushSubscription({
+    userId: req.user.id,
+    endpoint: req.body?.endpoint || req.body?.subscription?.endpoint || ''
+  });
+  res.json({ ok: removed });
 });
 
 app.get('/api/settings', (_req, res) => {
@@ -589,6 +617,7 @@ app.use((error, _req, res, _next) => {
 function emitState(message) {
   io.emit('message:new', message);
   emitConversations();
+  queuePushNotification(message);
 }
 
 function emitConversations() {
@@ -607,6 +636,17 @@ function scheduleAutomaticAgent(message) {
       if (result?.transferred) emitConversations();
     } catch (error) {
       console.error('Automatic attendance failed:', error.message || error);
+    }
+  }, 0);
+}
+
+function queuePushNotification(message) {
+  if (message?.direction !== 'inbound') return;
+  setTimeout(async () => {
+    try {
+      await sendPushForMessage(message);
+    } catch (error) {
+      console.error('Push delivery failed:', error.message || error);
     }
   }, 0);
 }

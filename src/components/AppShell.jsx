@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { navItems, pageMeta } from '../app/navigation.jsx';
 import { Button } from './ui/index.js';
+import { Switch } from './ui/Switch.jsx';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,10 +78,12 @@ export function Header({
   themePreference,
   resolvedTheme,
   accentColor,
+  pushEnabled,
   currentUser,
   onRefreshStatus,
   onCycleTheme,
   onAccentChange,
+  onTogglePushNotifications,
   onLogout
 }) {
   const [title, description] = pageMeta[view] || pageMeta.inbox;
@@ -110,6 +113,15 @@ export function Header({
                   title={color}
                 />
               ))}
+            </div>
+            <DropdownMenuSeparator />
+            <div className="user-menu-switch">
+              <Switch
+                label="Push no dispositivo"
+                help="Recebe notificacoes quando novas mensagens entram no atendimento."
+                checked={pushEnabled}
+                onChange={(event) => onTogglePushNotifications?.(event.target.checked)}
+              />
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onLogout}><LogOut size={16} />Sair</DropdownMenuItem>

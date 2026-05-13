@@ -23,6 +23,7 @@ import { API, api } from '../../shared/api.js';
 import { formatTime, initials, isPlaceholderBody } from '../../shared/format.js';
 import { getMessageMedia } from '../../media.js';
 import { MEDIA_FILE_ACCEPT, formatBytes, formatDuration, prepareMediaFile, validateMediaFile } from '../../media-config.js';
+import { ImagePreSendModal } from './ImagePreSendModal.jsx';
 import { MediaLabelIcon, MessageBubble, getMessageMediaLabel } from './MessageBubble.jsx';
 
 export function ChatWindow({
@@ -48,6 +49,7 @@ export function ChatWindow({
   const [draft, setDraft] = useState('');
   const [mediaDraft, setMediaDraft] = useState(null);
   const [mediaProgress, setMediaProgress] = useState(0);
+  const [imagePreSendDraft, setImagePreSendDraft] = useState(null);
   const [replyingTo, setReplyingTo] = useState(null);
   const [transferTarget, setTransferTarget] = useState('');
   const [sending, setSending] = useState(false);
@@ -92,6 +94,7 @@ export function ChatWindow({
     setDraft('');
     setMediaDraft(null);
     setMediaProgress(0);
+    setImagePreSendDraft(null);
     setReplyingTo(null);
     setTransferTarget('');
     cancelAudioRecording();
@@ -150,18 +153,61 @@ export function ChatWindow({
   async function handleMediaSelection(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    await processComposerFile(file, 'selecionada');
+  }
+
+  async function handleComposerPaste(event) {
+    const files = extractClipboardFiles(event.clipboardData);
+    if (!files.length) return;
+
+    event.preventDefault();
+    if (files.length > 1) {
+      onError(new Error('Cole um arquivo por vez no chat.'));
+      return;
+    }
+
+    await processComposerFile(files[0], 'colada');
+  }
+
+  async function processComposerFile(inputFile, sourceLabel = 'selecionada') {
+    const file = normalizeComposerFile(inputFile);
+    if (!file) return;
 
     try {
       const validation = validateMediaFile(file);
       if (!validation.valid) throw new Error(validation.message);
-      setMediaProgress(4);
-      const prepared = await prepareMediaFile(file, { onProgress: setMediaProgress });
-      setMediaProgress(98);
-      const uploaded = await uploadPreparedMedia(prepared);
-      setMediaDraft(uploaded);
-      setMediaProgress(0);
+      if (validation.type === 'image') {
+        setMediaDraft(null);
+        setImagePreSendDraft({ file, sourceLabel });
+        setMediaProgress(0);
+        return;
+      }
+      await prepareAndAttachComposerFile(file, sourceLabel);
     } catch (error) {
-      onError(error instanceof Error ? error : new Error('Nao foi possivel preparar a midia selecionada.'));
+      onError(error instanceof Error ? error : new Error(`Nao foi possivel preparar a midia ${sourceLabel}.`));
+      setMediaProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function prepareAndAttachComposerFile(file, sourceLabel = 'selecionada') {
+    setMediaDraft(null);
+    setMediaProgress(4);
+    const prepared = await prepareMediaFile(file, { onProgress: setMediaProgress });
+    setMediaProgress(98);
+    const uploaded = await uploadPreparedMedia(prepared);
+    setMediaDraft({ ...uploaded, sourceLabel });
+    setMediaProgress(0);
+  }
+
+  async function confirmImagePreSend(editedFile) {
+    if (!editedFile) return;
+    const sourceLabel = imagePreSendDraft?.sourceLabel || 'selecionada';
+    setImagePreSendDraft(null);
+    try {
+      await prepareAndAttachComposerFile(editedFile, sourceLabel);
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error('Nao foi possivel preparar a imagem editada.'));
       setMediaProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -265,6 +311,7 @@ export function ChatWindow({
     setDraft('');
     setMediaDraft(null);
     setMediaProgress(0);
+    setImagePreSendDraft(null);
     setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -425,6 +472,7 @@ export function ChatWindow({
                   {mediaDraft.name}
                   {mediaDraft.size ? ` · ${formatBytes(mediaDraft.size)}` : ''}
                   {mediaDraft.compressed ? ' · comprimida' : ''}
+                  {mediaDraft.sourceLabel === 'colada' ? ' · colada do clipboard' : ''}
                 </span>
               )}
               {!mediaDraft && mediaProgress > 0 && <span><Loader2 className="spin" size={15} />Preparando midia {mediaProgress}%</span>}
@@ -457,6 +505,7 @@ export function ChatWindow({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleComposerKeyDown}
+            onPaste={handleComposerPaste}
             placeholder={canReply ? 'Digite uma mensagem' : 'Atenda o contato para responder'}
             disabled={!canReply || isRecording}
             rows={1}
@@ -466,6 +515,15 @@ export function ChatWindow({
           </button>
         </div>
       </form>
+
+      {imagePreSendDraft && (
+        <ImagePreSendModal
+          file={imagePreSendDraft.file}
+          sourceLabel={imagePreSendDraft.sourceLabel}
+          onCancel={() => setImagePreSendDraft(null)}
+          onConfirm={confirmImagePreSend}
+        />
+      )}
     </section>
   );
 }
@@ -560,6 +618,43 @@ function insertTextareaValue(textarea, value, setValue) {
     textarea.selectionStart = start + value.length;
     textarea.selectionEnd = start + value.length;
   });
+}
+
+function extractClipboardFiles(clipboardData) {
+  const items = Array.from(clipboardData?.items || []);
+  const filesFromItems = items
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile?.())
+    .filter((file) => file && file.size > 0);
+  if (filesFromItems.length) return filesFromItems;
+  return Array.from(clipboardData?.files || []).filter((file) => file && file.size > 0);
+}
+
+function normalizeComposerFile(file) {
+  if (!file) return null;
+  if (file.name) return file;
+  const extension = inferFileExtension(file.type);
+  const fileName = `arquivo-colado${extension ? `.${extension}` : ''}`;
+  return new File([file], fileName, { type: file.type || 'application/octet-stream' });
+}
+
+function inferFileExtension(mimeType) {
+  const mime = String(mimeType || '').split(';')[0].trim().toLowerCase();
+  return {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'audio/mpeg': 'mp3',
+    'audio/ogg': 'ogg',
+    'audio/wav': 'wav',
+    'audio/mp4': 'm4a',
+    'audio/webm': 'webm',
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'application/pdf': 'pdf',
+    'text/plain': 'txt'
+  }[mime] || '';
 }
 
 function pickRecorderMimeType() {

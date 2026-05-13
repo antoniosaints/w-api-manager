@@ -9,6 +9,9 @@ const settingsSource = readFileSync(new URL('../src/pages/SettingsPanel.jsx', im
 const usersSource = readFileSync(new URL('../src/pages/UsersPanel.jsx', import.meta.url), 'utf8');
 const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const serverSource = readFileSync(new URL('../server/index.js', import.meta.url), 'utf8');
+const pwaSource = readFileSync(new URL('../src/pwa.js', import.meta.url), 'utf8');
+const runtimeSource = readFileSync(new URL('../src/app/runtime-effects.js', import.meta.url), 'utf8');
+const shellSourceWithIndex = [shellSource, readFileSync(new URL('../index.html', import.meta.url), 'utf8')].join('\n');
 const cssSource = stylesSource;
 const appSource = [mainSource, apiSource, shellSource, settingsSource].join('\n');
 
@@ -136,6 +139,34 @@ test('composer uploads media separately and sends only a lightweight upload refe
   assert.doesNotMatch(chatWindowSource, /dataUrl:\s*mediaDraft\.dataUrl/);
 });
 
+test('composer can paste clipboard files into the chat without breaking text paste', () => {
+  const chatWindowSource = readFileSync(new URL('../src/components/chat/ChatWindow.jsx', import.meta.url), 'utf8');
+  assert.match(chatWindowSource, /handleComposerPaste/);
+  assert.match(chatWindowSource, /onPaste=\{handleComposerPaste\}/);
+  assert.match(chatWindowSource, /clipboardData\?\.items/);
+  assert.match(chatWindowSource, /getAsFile\?\.\(\)/);
+  assert.match(chatWindowSource, /event\.preventDefault\(\)/);
+  assert.match(chatWindowSource, /Cole um arquivo por vez no chat/);
+  assert.match(chatWindowSource, /arquivo-colado/);
+});
+
+test('image attachments open a pre-send modal with crop and resize presets', () => {
+  const chatWindowSource = readFileSync(new URL('../src/components/chat/ChatWindow.jsx', import.meta.url), 'utf8');
+  const imageModalSource = readFileSync(new URL('../src/components/chat/ImagePreSendModal.jsx', import.meta.url), 'utf8');
+  const imageEditingSource = readFileSync(new URL('../src/components/chat/image-editing.js', import.meta.url), 'utf8');
+  assert.match(chatWindowSource, /ImagePreSendModal/);
+  assert.match(chatWindowSource, /setImagePreSendDraft/);
+  assert.match(chatWindowSource, /validation\.type === 'image'/);
+  assert.match(imageModalSource, /Preparo da imagem/);
+  assert.match(imageModalSource, /Anexar imagem/);
+  assert.match(imageEditingSource, /Quadrado 1:1/);
+  assert.match(imageEditingSource, /Retrato 4:5/);
+  assert.match(imageEditingSource, /Paisagem 16:9/);
+  assert.match(imageEditingSource, /1600 px/);
+  assert.match(imageEditingSource, /buildEditedImageFile/);
+  assert.match(imageEditingSource, /resolveCenteredCrop/);
+});
+
 test('selected chat clears unread badge optimistically while read confirmation is saved', () => {
   assert.match(mainSource, /function markConversationRead\(sessionId\)/);
   assert.match(mainSource, /item\.id === sessionId \? \{ \.\.\.item, unreadCount: 0 \} : item/);
@@ -168,6 +199,29 @@ test('agents menu, accent picker, sectors and attendance tags are wired', () => 
   assert.match(serverSource, /\/api\/sectors/);
   assert.match(serverSource, /\/api\/support-tags/);
   assert.match(serverSource, /\/api\/auth\/me\/preferences/);
+});
+
+test('user menu exposes device push toggle and app registers a service worker', () => {
+  assert.match(shellSource, /Push no dispositivo/);
+  assert.match(shellSource, /onTogglePushNotifications/);
+  assert.match(mainSource, /registerAppServiceWorker/);
+  assert.match(pwaSource, /enablePushNotifications/);
+  assert.match(pwaSource, /disablePushNotifications/);
+  assert.match(serverSource, /\/api\/push\/public-key/);
+  assert.match(serverSource, /\/api\/push\/subscribe/);
+  assert.match(serverSource, /\/api\/push\/unsubscribe/);
+});
+
+test('html shell wires the manifest and apple install metadata for the pwa', () => {
+  assert.match(shellSourceWithIndex, /manifest\.webmanifest/);
+  assert.match(shellSourceWithIndex, /apple-mobile-web-app-capable/);
+  assert.match(shellSourceWithIndex, /theme-color/);
+});
+
+test('push notifications deep-link the app back into inbox conversations', () => {
+  assert.match(runtimeSource, /readLaunchRoute/);
+  assert.match(runtimeSource, /clearLaunchRoute/);
+  assert.match(runtimeSource, /params\.get\('session'\)/);
 });
 
 test('chat bubbles use WhatsApp-like compact tails and spacing', () => {

@@ -20,12 +20,14 @@ import {
   listConversations,
   listUsers,
   listAiAgents,
+  listPushSubscriptionsByUserIds,
   listSectors,
   listSupportTags,
   listUsersTable,
   markSupportSessionRead,
   normalizeLegacyGroupChatIds,
   saveContact,
+  savePushSubscription,
   setSupportSessionTags,
   transferSupportSession,
   updateUser,
@@ -517,6 +519,134 @@ test('users can toggle message name header preference', () => {
   const updated = updateUser(user.id, { sendNameHeader: false });
 
   assert.equal(updated.sendNameHeader, false);
+});
+
+test('users can toggle push notification preference', () => {
+  const suffix = Date.now();
+  const user = createUser({
+    name: `Push ${suffix}`,
+    email: `push-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true,
+    pushEnabled: false
+  });
+
+  assert.equal(user.pushEnabled, false);
+
+  const updated = updateUser(user.id, { pushEnabled: true });
+
+  assert.equal(updated.pushEnabled, true);
+});
+
+test('push subscriptions are persisted only for active users with push enabled', () => {
+  const suffix = Date.now();
+  const enabledUser = createUser({
+    name: `Push Ativo ${suffix}`,
+    email: `push-ativo-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true,
+    pushEnabled: true
+  });
+  const disabledUser = createUser({
+    name: `Push Inativo ${suffix}`,
+    email: `push-inativo-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true,
+    pushEnabled: false
+  });
+
+  const first = savePushSubscription({
+    userId: enabledUser.id,
+    userAgent: 'Chrome Test',
+    deviceLabel: 'Desktop',
+    subscription: {
+      endpoint: `https://push.example.test/sub-${suffix}`,
+      keys: { p256dh: `key-${suffix}`, auth: `auth-${suffix}` }
+    }
+  });
+  savePushSubscription({
+    userId: disabledUser.id,
+    userAgent: 'Chrome Test',
+    deviceLabel: 'Desktop',
+    subscription: {
+      endpoint: `https://push.example.test/sub-disabled-${suffix}`,
+      keys: { p256dh: `key-disabled-${suffix}`, auth: `auth-disabled-${suffix}` }
+    }
+  });
+
+  const listed = listPushSubscriptionsByUserIds([enabledUser.id, disabledUser.id]);
+
+  assert.equal(first.endpoint, `https://push.example.test/sub-${suffix}`);
+  assert.equal(first.deviceLabel, 'Desktop');
+  assert.equal(listed.some((item) => item.userId === enabledUser.id), true);
+  assert.equal(listed.some((item) => item.userId === disabledUser.id), false);
+});
+
+test('saving the same push endpoint updates the device record instead of duplicating it', () => {
+  const suffix = Date.now();
+  const user = createUser({
+    name: `Push Dedupe ${suffix}`,
+    email: `push-dedupe-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true,
+    pushEnabled: true
+  });
+  const endpoint = `https://push.example.test/dedupe-${suffix}`;
+
+  const first = savePushSubscription({
+    userId: user.id,
+    userAgent: 'Chrome 1',
+    deviceLabel: 'Desktop 1',
+    subscription: {
+      endpoint,
+      keys: { p256dh: `key-a-${suffix}`, auth: `auth-a-${suffix}` }
+    }
+  });
+  const second = savePushSubscription({
+    userId: user.id,
+    userAgent: 'Chrome 2',
+    deviceLabel: 'Desktop 2',
+    subscription: {
+      endpoint,
+      keys: { p256dh: `key-b-${suffix}`, auth: `auth-b-${suffix}` }
+    }
+  });
+  const count = db.prepare('SELECT COUNT(*) AS total FROM push_subscriptions WHERE endpoint = ?').get(endpoint);
+
+  assert.equal(first.id, second.id);
+  assert.equal(second.deviceLabel, 'Desktop 2');
+  assert.equal(second.keys.p256dh, `key-b-${suffix}`);
+  assert.equal(count.total, 1);
+});
+
+test('deleting a user removes their push subscriptions', () => {
+  const suffix = Date.now();
+  const user = createUser({
+    name: `Push Delete ${suffix}`,
+    email: `push-delete-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true,
+    pushEnabled: true
+  });
+  const endpoint = `https://push.example.test/delete-${suffix}`;
+
+  savePushSubscription({
+    userId: user.id,
+    userAgent: 'Chrome',
+    deviceLabel: 'Desktop',
+    subscription: {
+      endpoint,
+      keys: { p256dh: `key-delete-${suffix}`, auth: `auth-delete-${suffix}` }
+    }
+  });
+
+  assert.equal(deleteUser(user.id), true);
+  assert.equal(db.prepare('SELECT COUNT(*) AS total FROM push_subscriptions WHERE endpoint = ?').get(endpoint).total, 0);
 });
 
 test('sectors can be linked to users and transferred sessions expose sector badges', () => {

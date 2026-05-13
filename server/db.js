@@ -63,6 +63,20 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    device_label TEXT,
+    user_agent TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+
   CREATE TABLE IF NOT EXISTS contacts (
     id TEXT PRIMARY KEY,
     phone TEXT NOT NULL UNIQUE,
@@ -180,6 +194,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_contacts_last_message ON contacts(last_message_at);
   CREATE INDEX IF NOT EXISTS idx_sessions_status_last_message ON support_sessions(status, last_message_at);
   CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
   CREATE INDEX IF NOT EXISTS idx_session_events_session ON support_session_events(session_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_user_sectors_sector ON user_sectors(sector_id);
   CREATE INDEX IF NOT EXISTS idx_session_tags_tag ON support_session_tags(tag_id);
@@ -187,6 +202,7 @@ db.exec(`
 
 ensureColumn('users', 'theme_color', "TEXT NOT NULL DEFAULT 'green'");
 ensureColumn('users', 'send_name_header', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'push_enabled', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('contacts', 'chat_status', "TEXT NOT NULL DEFAULT 'waiting'");
 ensureColumn('contacts', 'is_group', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('contacts', 'email', 'TEXT');
@@ -222,7 +238,10 @@ const envDefaults = {
   webhookPublicUrl: process.env.WEBHOOK_PUBLIC_URL || '',
   ignoreGroups: process.env.WAPI_IGNORE_GROUPS || 'false',
   automaticAttendance: process.env.WAPI_AUTOMATIC_ATTENDANCE || 'false',
-  geminiApiKey: process.env.GEMINI_API_KEY || ''
+  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  pushVapidPublicKey: process.env.PUSH_VAPID_PUBLIC_KEY || '',
+  pushVapidPrivateKey: process.env.PUSH_VAPID_PRIVATE_KEY || '',
+  pushSubject: process.env.PUSH_SUBJECT || 'mailto:push@wapi.local'
 };
 
 const getSettingStmt = db.prepare('SELECT value FROM settings WHERE name = ?');
@@ -235,6 +254,7 @@ const findContactStmt = db.prepare('SELECT * FROM contacts WHERE phone = ?');
 const findSessionStmt = db.prepare('SELECT * FROM support_sessions WHERE id = ?');
 const findUserStmt = db.prepare('SELECT * FROM users WHERE id = ?');
 const findUserByEmailStmt = db.prepare('SELECT * FROM users WHERE lower(email) = lower(?)');
+const findPushSubscriptionByEndpointStmt = db.prepare('SELECT * FROM push_subscriptions WHERE endpoint = ?');
 const findSectorStmt = db.prepare('SELECT * FROM sectors WHERE id = ?');
 const findSupportTagStmt = db.prepare('SELECT * FROM support_tags WHERE id = ?');
 const findAiAgentStmt = db.prepare('SELECT * FROM ai_agents WHERE id = ?');
@@ -291,8 +311,28 @@ export function publicSettings() {
     hasToken: Boolean(settings.token),
     ignoreGroups: settings.ignoreGroups === 'true',
     automaticAttendance: settings.automaticAttendance === 'true',
-    hasGeminiApiKey: Boolean(settings.geminiApiKey)
+    hasGeminiApiKey: Boolean(settings.geminiApiKey),
+    hasPushConfigured: Boolean(settings.pushVapidPublicKey && settings.pushVapidPrivateKey)
   };
+}
+
+export function getPushConfiguration() {
+  const settings = getSettings();
+  return {
+    publicKey: settings.pushVapidPublicKey || '',
+    privateKey: settings.pushVapidPrivateKey || '',
+    subject: settings.pushSubject || envDefaults.pushSubject
+  };
+}
+
+export function savePushConfiguration({ publicKey = '', privateKey = '', subject = envDefaults.pushSubject } = {}) {
+  const tx = db.transaction(() => {
+    setSettingStmt.run('pushVapidPublicKey', String(publicKey || ''));
+    setSettingStmt.run('pushVapidPrivateKey', String(privateKey || ''));
+    setSettingStmt.run('pushSubject', String(subject || envDefaults.pushSubject));
+  });
+  tx();
+  return getPushConfiguration();
 }
 
 export function saveSettings(nextSettings) {
@@ -381,7 +421,7 @@ export function cleanupWebhookStatusArtifacts() {
   return { messages: artifacts.length, sessions: removedSessions, emptySessions: removedEmptySessions };
 }
 
-export function createUser({ name, email, password, role = 'attendant', active = true, themeColor = 'green', sendNameHeader = false, sectorIds = [] }) {
+export function createUser({ name, email, password, role = 'attendant', active = true, themeColor = 'green', sendNameHeader = false, pushEnabled = false, sectorIds = [] }) {
   const cleanEmail = normalizeEmail(email);
   if (!name || !cleanEmail || !password) {
     const error = new Error('Informe nome, email e senha.');
@@ -403,14 +443,15 @@ export function createUser({ name, email, password, role = 'attendant', active =
     role: normalizeUserRole(role),
     themeColor: normalizeAccentColor(themeColor),
     sendNameHeader: sendNameHeader ? 1 : 0,
+    pushEnabled: pushEnabled ? 1 : 0,
     active: active ? 1 : 0,
     createdAt: timestamp,
     updatedAt: timestamp
   };
 
   db.prepare(`
-    INSERT INTO users (id, name, email, password_hash, role, theme_color, send_name_header, active, created_at, updated_at)
-    VALUES (@id, @name, @email, @passwordHash, @role, @themeColor, @sendNameHeader, @active, @createdAt, @updatedAt)
+    INSERT INTO users (id, name, email, password_hash, role, theme_color, send_name_header, push_enabled, active, created_at, updated_at)
+    VALUES (@id, @name, @email, @passwordHash, @role, @themeColor, @sendNameHeader, @pushEnabled, @active, @createdAt, @updatedAt)
   `).run(row);
   setUserSectorIds(row.id, sectorIds);
 
@@ -435,6 +476,7 @@ export function updateUser(id, changes = {}) {
         role = @role,
         theme_color = @themeColor,
         send_name_header = @sendNameHeader,
+        push_enabled = @pushEnabled,
         active = @active,
         updated_at = @updatedAt
     WHERE id = @id
@@ -449,6 +491,11 @@ export function updateUser(id, changes = {}) {
       : Object.prototype.hasOwnProperty.call(changes, 'send_name_header')
         ? (changes.send_name_header ? 1 : 0)
         : existing.send_name_header,
+    pushEnabled: Object.prototype.hasOwnProperty.call(changes, 'pushEnabled')
+      ? (changes.pushEnabled ? 1 : 0)
+      : Object.prototype.hasOwnProperty.call(changes, 'push_enabled')
+        ? (changes.push_enabled ? 1 : 0)
+        : existing.push_enabled,
     active: Object.prototype.hasOwnProperty.call(changes, 'active') ? (changes.active ? 1 : 0) : existing.active,
     updatedAt: now()
   });
@@ -485,6 +532,7 @@ export function deleteUser(id) {
   const timestamp = now();
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(id);
     db.prepare('DELETE FROM user_sectors WHERE user_id = ?').run(id);
     db.prepare('UPDATE support_sessions SET assigned_user_id = NULL, updated_at = ? WHERE assigned_user_id = ?').run(timestamp, id);
     db.prepare('UPDATE support_session_events SET actor_user_id = NULL WHERE actor_user_id = ?').run(id);
@@ -801,6 +849,88 @@ export function deleteAuthSession(sessionId) {
 
 export function cleanupExpiredAuthSessions() {
   db.prepare("DELETE FROM auth_sessions WHERE datetime(expires_at) <= datetime('now')").run();
+}
+
+export function savePushSubscription({ userId, subscription, userAgent = '', deviceLabel = '' } = {}) {
+  if (!userId || !findUserStmt.get(userId)) {
+    const error = new Error('Usuario da assinatura push nao encontrado.');
+    error.status = 404;
+    throw error;
+  }
+
+  const normalized = normalizePushSubscription(subscription);
+  const timestamp = now();
+  const existing = findPushSubscriptionByEndpointStmt.get(normalized.endpoint);
+  const row = {
+    id: existing?.id || randomUUID(),
+    userId,
+    endpoint: normalized.endpoint,
+    p256dh: normalized.keys.p256dh,
+    auth: normalized.keys.auth,
+    deviceLabel: cleanOptional(deviceLabel),
+    userAgent: cleanOptional(userAgent),
+    createdAt: existing?.created_at || timestamp,
+    updatedAt: timestamp,
+    lastSeenAt: timestamp
+  };
+
+  db.prepare(`
+    INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, device_label, user_agent, created_at, updated_at, last_seen_at)
+    VALUES (@id, @userId, @endpoint, @p256dh, @auth, @deviceLabel, @userAgent, @createdAt, @updatedAt, @lastSeenAt)
+    ON CONFLICT(endpoint) DO UPDATE SET
+      user_id = excluded.user_id,
+      p256dh = excluded.p256dh,
+      auth = excluded.auth,
+      device_label = excluded.device_label,
+      user_agent = excluded.user_agent,
+      updated_at = excluded.updated_at,
+      last_seen_at = excluded.last_seen_at
+  `).run(row);
+
+  return getPushSubscriptionByEndpoint(normalized.endpoint);
+}
+
+export function deletePushSubscription({ userId, endpoint } = {}) {
+  const cleanEndpoint = String(endpoint || '').trim();
+  if (!cleanEndpoint) return false;
+  const subscription = findPushSubscriptionByEndpointStmt.get(cleanEndpoint);
+  if (!subscription) return false;
+  if (userId && subscription.user_id !== userId) return false;
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(cleanEndpoint);
+  return true;
+}
+
+export function listPushSubscriptionsByUserIds(userIds = []) {
+  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).map((item) => String(item || '').trim()).filter(Boolean))];
+  if (!ids.length) return [];
+  const placeholders = ids.map(() => '?').join(', ');
+  return db.prepare(`
+    SELECT ps.*, u.name AS user_name, u.push_enabled, u.active
+    FROM push_subscriptions ps
+    JOIN users u ON u.id = ps.user_id
+    WHERE ps.user_id IN (${placeholders})
+      AND u.active = 1
+      AND u.push_enabled = 1
+    ORDER BY datetime(ps.updated_at) DESC
+  `).all(...ids).map(mapPushSubscription);
+}
+
+export function listPushSubscriptionsForSession(sessionId) {
+  const session = findSessionStmt.get(sessionId);
+  if (!session) return [];
+
+  const userIds = session.assigned_user_id
+    ? [session.assigned_user_id]
+    : db.prepare(`
+        SELECT id FROM users
+        WHERE active = 1 AND push_enabled = 1
+      `).all().map((row) => row.id);
+
+  return listPushSubscriptionsByUserIds(userIds);
+}
+
+export function getPushSubscriptionByEndpoint(endpoint) {
+  return mapPushSubscription(findPushSubscriptionByEndpointStmt.get(String(endpoint || '').trim()));
 }
 
 export function upsertContact({ phone, name, avatarUrl, isGroup = false, lastMessageAt, chatStatus }) {
@@ -1951,10 +2081,30 @@ function mapUser(row) {
     role: row.role,
     themeColor: normalizeAccentColor(row.theme_color),
     sendNameHeader: Boolean(row.send_name_header),
+    pushEnabled: Boolean(row.push_enabled),
     sectors: listUserSectors(row.id),
     active: Boolean(row.active),
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function mapPushSubscription(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name || null,
+    endpoint: row.endpoint,
+    keys: {
+      p256dh: row.p256dh,
+      auth: row.auth
+    },
+    deviceLabel: row.device_label || '',
+    userAgent: row.user_agent || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastSeenAt: row.last_seen_at
   };
 }
 
@@ -2235,6 +2385,26 @@ function average(values) {
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeOptionalString(value) {
+  const next = String(value || '').trim();
+  return next || '';
+}
+
+function normalizePushSubscription(subscription) {
+  const endpoint = normalizeOptionalString(subscription?.endpoint);
+  const p256dh = normalizeOptionalString(subscription?.keys?.p256dh);
+  const auth = normalizeOptionalString(subscription?.keys?.auth);
+  if (!endpoint || !p256dh || !auth) {
+    const error = new Error('Assinatura push invalida para este dispositivo.');
+    error.status = 400;
+    throw error;
+  }
+  return {
+    endpoint,
+    keys: { p256dh, auth }
+  };
 }
 
 function normalizeUserRole(value) {

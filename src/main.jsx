@@ -46,8 +46,11 @@ import { ConnectionPanel } from './pages/ConnectionPanel.jsx';
 import { WebhookPanel } from './pages/WebhookPanel.jsx';
 import { SettingsPanel } from './pages/SettingsPanel.jsx';
 import { AgentsPanel } from './pages/AgentsPanel.jsx';
+import { useLaunchRouteSelection, usePushSync, readLaunchRoute } from './app/runtime-effects.js';
+import { useUserPreferenceActions } from './app/user-preferences.js';
 import { getMessageMedia } from './media.js';
 import { MEDIA_FILE_ACCEPT, formatBytes, prepareMediaFile, validateMediaFile } from './media-config.js';
+import { registerAppServiceWorker } from './pwa.js';
 import {
   getNextThemePreference,
   resolveThemePreference,
@@ -93,14 +96,21 @@ function App() {
     return window.localStorage.getItem('wapi-sidebar-collapsed') === 'true';
   });
   const messagesRequestRef = useRef(0);
+  const launchRouteRef = useRef(readLaunchRoute());
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId);
   const selectedPhone = selectedConversation?.phone || '';
   const resolvedTheme = resolveThemePreference(themePreference, systemTheme);
   const connected = isConnected(status);
+  const {
+    updateAccentColor,
+    updateUserPreferences,
+    togglePushNotifications
+  } = useUserPreferenceActions({ setCurrentUser, showToast, handleError });
 
   useEffect(() => {
     checkAuth();
+    registerAppServiceWorker().catch(() => null);
   }, []);
 
   useEffect(() => {
@@ -125,6 +135,15 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem('wapi-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+
+  usePushSync(currentUser);
+  useLaunchRouteSelection({
+    launchRouteRef,
+    currentUser,
+    conversations,
+    setView,
+    setSelectedConversationId
+  });
 
   useEffect(() => {
     if (!currentUser) return;
@@ -325,20 +344,6 @@ function App() {
     }
   }
 
-  async function updateAccentColor(themeColor) {
-    return updateUserPreferences({ themeColor }, 'Cor do tema atualizada');
-  }
-
-  async function updateUserPreferences(changes, successMessage = 'Preferencias atualizadas') {
-    try {
-      const data = await api('/api/auth/me/preferences', { method: 'PATCH', body: changes });
-      setCurrentUser(data.user);
-      showToast(successMessage);
-    } catch (error) {
-      handleError(error);
-    }
-  }
-
   async function updateConversationTags(sessionId, tagIds) {
     try {
       await api(`/api/support-sessions/${sessionId}/tags`, { method: 'PATCH', body: { tagIds } });
@@ -414,10 +419,12 @@ function App() {
           themePreference={themePreference}
           resolvedTheme={resolvedTheme}
           accentColor={currentUser?.themeColor || 'green'}
+          pushEnabled={Boolean(currentUser?.pushEnabled)}
           currentUser={currentUser}
           onRefreshStatus={refreshStatus}
           onCycleTheme={() => setThemePreference((current) => getNextThemePreference(current))}
           onAccentChange={updateAccentColor}
+          onTogglePushNotifications={togglePushNotifications}
           onPreferenceChange={updateUserPreferences}
           onLogout={logout}
         />
