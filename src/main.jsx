@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io } from 'socket.io-client';
+import Chart from 'chart.js/auto';
 import {
   Activity,
   BarChart3,
@@ -661,7 +662,7 @@ function DashboardPanelPro({ connected, settings }) {
       </div>
 
       <div className="dashboard-grid dashboard-grid-rich">
-        <Card as="section" variant="panel" className="single-panel dashboard-panel dashboard-wide">
+        <Card as="section" variant="panel" className="single-panel dashboard-panel dashboard-chart-card">
           <div className="panel-title compact">
             <BarChart3 size={22} />
             <div>
@@ -670,10 +671,22 @@ function DashboardPanelPro({ connected, settings }) {
               <p>Entradas, saidas e finalizacoes do periodo.</p>
             </div>
           </div>
-          <MiniTimelineChart data={dashboard?.timeline || []} />
+          <TimelineChart data={dashboard?.timeline || []} />
         </Card>
 
-        <Card as="section" variant="panel" className="single-panel dashboard-panel">
+        <Card as="section" variant="panel" className="single-panel dashboard-panel dashboard-chart-card">
+          <div className="panel-title compact">
+            <CircleDot size={22} />
+            <div>
+              <span>Status</span>
+              <h1>Distribuicao atual</h1>
+              <p>Fila, ativos e finalizados no periodo.</p>
+            </div>
+          </div>
+          <StatusDistributionChart status={status} />
+        </Card>
+
+        <Card as="section" variant="panel" className="single-panel dashboard-panel dashboard-chart-card">
           <div className="panel-title compact">
             <Users size={22} />
             <div>
@@ -682,10 +695,10 @@ function DashboardPanelPro({ connected, settings }) {
               <p>Responsaveis, ativos e finalizados.</p>
             </div>
           </div>
-          <HorizontalBars rows={dashboard?.byUser || []} labelKey="name" valueKey="total" detail={(item) => `${item.active} ativos - ${item.finished} finalizados`} />
+          <BarRankChart rows={dashboard?.byUser || []} labelKey="name" valueKey="total" detail={(item) => `${item.active} ativos - ${item.finished} finalizados`} />
         </Card>
 
-        <Card as="section" variant="panel" className="single-panel dashboard-panel">
+        <Card as="section" variant="panel" className="single-panel dashboard-panel dashboard-chart-card">
           <div className="panel-title compact">
             <Activity size={22} />
             <div>
@@ -694,10 +707,10 @@ function DashboardPanelPro({ connected, settings }) {
               <p>Distribuicao operacional por fila.</p>
             </div>
           </div>
-          <HorizontalBars rows={dashboard?.bySector || []} labelKey="name" valueKey="total" detail={(item) => `${item.waiting} espera - ${item.active} ativos`} />
+          <BarRankChart rows={dashboard?.bySector || []} labelKey="name" valueKey="total" detail={(item) => `${item.waiting} espera - ${item.active} ativos`} />
         </Card>
 
-        <Card as="section" variant="panel" className="single-panel dashboard-panel">
+        <Card as="section" variant="panel" className="single-panel dashboard-panel dashboard-chart-card">
           <div className="panel-title compact">
             <Tags size={22} />
             <div>
@@ -706,7 +719,7 @@ function DashboardPanelPro({ connected, settings }) {
               <p>Marcadores mais usados no periodo.</p>
             </div>
           </div>
-          <HorizontalBars rows={dashboard?.byTag || []} labelKey="name" valueKey="total" detail={(item) => `${item.finished} finalizados`} />
+          <BarRankChart rows={dashboard?.byTag || []} labelKey="name" valueKey="total" detail={(item) => `${item.finished} finalizados`} />
         </Card>
 
         <Card as="section" variant="panel" className="single-panel dashboard-panel">
@@ -916,58 +929,240 @@ function SummaryCard({ icon: Icon, label, value, note }) {
   );
 }
 
-function MiniTimelineChart({ data }) {
-  const width = 640;
-  const height = 180;
-  const max = Math.max(1, ...data.map((item) => item.inbound + item.outbound + item.finished));
-  const points = data.map((item, index) => {
-    const x = data.length <= 1 ? width / 2 : (index / (data.length - 1)) * width;
-    const y = height - ((item.inbound + item.outbound + item.finished) / max) * (height - 24) - 12;
-    return `${x},${y}`;
-  }).join(' ');
+function ChartCanvas({ type, data, options, className = 'chart-shell' }) {
+  const canvasRef = useRef(null);
 
-  if (!data.length) return <p className="empty">Nenhum dado no periodo.</p>;
+  useEffect(() => {
+    if (!canvasRef.current) return undefined;
+    const chart = new Chart(canvasRef.current, { type, data, options });
+    return () => chart.destroy();
+  }, [type, data, options]);
 
   return (
-    <div className="mini-timeline-chart">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Timeline de atendimentos">
-        <polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        {data.map((item, index) => {
-          const x = data.length <= 1 ? width / 2 : (index / (data.length - 1)) * width;
-          const y = height - ((item.inbound + item.outbound + item.finished) / max) * (height - 24) - 12;
-          return <circle key={item.date} cx={x} cy={y} r="4" />;
-        })}
-      </svg>
-      <div className="timeline-labels">
-        {data.slice(0, 6).map((item) => (
-          <span key={item.date}>{formatShortDate(item.date)}</span>
-        ))}
-      </div>
+    <div className={className}>
+      <canvas ref={canvasRef} />
     </div>
   );
 }
 
-function HorizontalBars({ rows, labelKey, valueKey, detail }) {
-  const max = Math.max(1, ...rows.map((item) => Number(item[valueKey] || 0)));
-  if (!rows.length) return <p className="empty">Nenhum registro no periodo.</p>;
+function TimelineChart({ data }) {
+  const theme = getChartTheme();
+  const chartData = useMemo(() => ({
+    labels: data.map((item) => formatShortDate(item.date)),
+    datasets: [
+      {
+        label: 'Entradas',
+        data: data.map((item) => Number(item.inbound || 0)),
+        borderColor: theme.accent,
+        backgroundColor: theme.accentSoft,
+        tension: 0.36,
+        pointRadius: 2.5,
+        pointHoverRadius: 5,
+        fill: true
+      },
+      {
+        label: 'Saidas',
+        data: data.map((item) => Number(item.outbound || 0)),
+        borderColor: theme.blue,
+        backgroundColor: theme.blueSoft,
+        tension: 0.36,
+        pointRadius: 2.5,
+        pointHoverRadius: 5,
+        fill: false
+      },
+      {
+        label: 'Finalizados',
+        data: data.map((item) => Number(item.finished || 0)),
+        borderColor: theme.amber,
+        backgroundColor: theme.amberSoft,
+        tension: 0.36,
+        pointRadius: 2.5,
+        pointHoverRadius: 5,
+        fill: false
+      }
+    ]
+  }), [data, theme.accent, theme.accentSoft, theme.blue, theme.blueSoft, theme.amber, theme.amberSoft]);
+  const options = useMemo(() => ({
+    ...getBaseChartOptions(theme),
+    scales: getCartesianChartScales(theme)
+  }), [theme.grid, theme.ink, theme.line, theme.muted, theme.surface]);
+
+  if (!data.length) return <p className="empty chart-empty">Nenhum dado no periodo.</p>;
+  return <ChartCanvas type="line" data={chartData} options={options} />;
+}
+
+function StatusDistributionChart({ status }) {
+  const theme = getChartTheme();
+  const rows = [
+    { label: 'Em espera', value: Number(status?.waiting || 0), color: theme.amber },
+    { label: 'Ativos', value: Number(status?.active || 0), color: theme.accent },
+    { label: 'Finalizados', value: Number(status?.finished || 0), color: theme.blue }
+  ];
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const chartData = useMemo(() => ({
+    labels: rows.map((row) => row.label),
+    datasets: [{
+      data: rows.map((row) => row.value),
+      backgroundColor: rows.map((row) => row.color),
+      borderColor: theme.surface,
+      borderWidth: 3,
+      hoverOffset: 5
+    }]
+  }), [rows, theme.surface]);
+  const options = useMemo(() => ({
+    ...getBaseChartOptions(theme),
+    cutout: '66%',
+    plugins: {
+      ...getBaseChartOptions(theme).plugins,
+      legend: {
+        ...getBaseChartOptions(theme).plugins.legend,
+        position: 'right'
+      }
+    }
+  }), [theme.grid, theme.ink, theme.line, theme.muted, theme.surface]);
+
+  if (!total) return <p className="empty chart-empty">Nenhum atendimento no periodo.</p>;
+  return (
+    <>
+      <ChartCanvas type="doughnut" data={chartData} options={options} className="chart-shell chart-shell-doughnut" />
+      <div className="chart-total">
+        <strong>{total}</strong>
+        <small>atendimentos</small>
+      </div>
+    </>
+  );
+}
+
+function BarRankChart({ rows, labelKey, valueKey, detail }) {
+  const theme = getChartTheme();
+  const chartRows = rows.slice(0, 8);
+  const chartData = useMemo(() => ({
+    labels: chartRows.map((item) => shortenChartLabel(item[labelKey] || 'Sem nome')),
+    datasets: [{
+      label: 'Total',
+      data: chartRows.map((item) => Number(item[valueKey] || 0)),
+      backgroundColor: chartRows.map((_, index) => theme.palette[index % theme.palette.length]),
+      borderRadius: 6,
+      borderSkipped: false,
+      maxBarThickness: 22
+    }]
+  }), [chartRows, labelKey, valueKey, theme.palette]);
+  const options = useMemo(() => ({
+    ...getBaseChartOptions(theme),
+    indexAxis: 'y',
+    scales: getCartesianChartScales(theme),
+    plugins: {
+      ...getBaseChartOptions(theme).plugins,
+      legend: { display: false },
+      tooltip: {
+        ...getBaseChartOptions(theme).plugins.tooltip,
+        callbacks: {
+          afterLabel: (context) => detail?.(chartRows[context.dataIndex]) || ''
+        }
+      }
+    }
+  }), [chartRows, detail, theme.grid, theme.ink, theme.line, theme.muted, theme.surface]);
+
+  if (!chartRows.length) return <p className="empty chart-empty">Nenhum registro no periodo.</p>;
 
   return (
-    <div className="horizontal-bars">
-      {rows.slice(0, 8).map((item) => {
-        const value = Number(item[valueKey] || 0);
-        return (
-          <div className="horizontal-bar-row" key={item.userId || item.sectorId || item.tagId || item[labelKey]}>
-            <div>
-              <strong>{item[labelKey]}</strong>
-              <small>{detail?.(item)}</small>
-            </div>
-            <span className="horizontal-bar-track"><i style={{ width: `${Math.max(8, (value / max) * 100)}%` }} /></span>
-            <em>{value}</em>
-          </div>
-        );
-      })}
-    </div>
+    <>
+      <ChartCanvas type="bar" data={chartData} options={options} />
+      <div className="chart-footnotes">
+        {chartRows.slice(0, 3).map((item) => (
+          <span key={item.userId || item.sectorId || item.tagId || item[labelKey]}>
+            <strong>{item[labelKey] || 'Sem nome'}</strong>
+            <small>{detail?.(item)}</small>
+          </span>
+        ))}
+      </div>
+    </>
   );
+}
+
+function getChartTheme() {
+  if (typeof window === 'undefined') {
+    return {
+      accent: '#247c5a',
+      accentSoft: '#dcefe6',
+      amber: '#996515',
+      amberSoft: '#fff4d8',
+      blue: '#2c638f',
+      blueSoft: '#e6f0f8',
+      grid: '#d9e1dc',
+      ink: '#121a17',
+      line: '#d9e1dc',
+      muted: '#68786f',
+      surface: '#ffffff',
+      palette: ['#247c5a', '#2c638f', '#996515', '#4f766a', '#5f6e8a', '#8a6f42', '#49756c', '#6a7f93']
+    };
+  }
+
+  const styles = window.getComputedStyle(document.documentElement);
+  const read = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+  const accent = read('--accent', '#247c5a');
+  const blue = read('--blue', '#2c638f');
+  const amber = read('--amber', '#996515');
+  return {
+    accent,
+    accentSoft: read('--accent-soft', '#dcefe6'),
+    amber,
+    amberSoft: read('--amber-soft', '#fff4d8'),
+    blue,
+    blueSoft: read('--blue-soft', '#e6f0f8'),
+    grid: read('--line', '#d9e1dc'),
+    ink: read('--ink', '#121a17'),
+    line: read('--line', '#d9e1dc'),
+    muted: read('--muted', '#68786f'),
+    surface: read('--surface', '#ffffff'),
+    palette: [accent, blue, amber, read('--accent-strong', '#145f43'), read('--ink-soft', '#31413a'), '#6f7f88', '#8a7a52', '#52776b']
+  };
+}
+
+function getBaseChartOptions(theme) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: theme.muted,
+          boxWidth: 10,
+          boxHeight: 10,
+          usePointStyle: true,
+          font: { family: 'Roboto', size: 11 }
+        }
+      },
+      tooltip: {
+        backgroundColor: theme.surface,
+        titleColor: theme.ink,
+        bodyColor: theme.muted,
+        borderColor: theme.line,
+        borderWidth: 1,
+        padding: 10,
+        displayColors: true
+      }
+    }
+  };
+}
+
+function getCartesianChartScales(theme) {
+  return {
+    x: {
+      grid: { color: theme.grid },
+      ticks: { color: theme.muted, precision: 0, font: { family: 'Roboto', size: 11 } }
+    },
+    y: {
+      grid: { color: theme.grid },
+      ticks: { color: theme.muted, precision: 0, font: { family: 'Roboto', size: 11 } }
+    }
+  };
+}
+
+function shortenChartLabel(value) {
+  const label = String(value || '').trim();
+  return label.length > 18 ? `${label.slice(0, 17)}...` : label;
 }
 
 function paginateRows(rows, page, limit) {

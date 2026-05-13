@@ -1090,6 +1090,10 @@ textarea:focus-visible {
   padding-bottom: 0;
 }
 
+.dashboard-chart-card {
+  min-height: 0;
+}
+
 .insight-list {
   display: grid;
   gap: 10px;
@@ -1153,80 +1157,74 @@ textarea:focus-visible {
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
-.mini-timeline-chart {
-  display: grid;
-  gap: 8px;
+.chart-shell {
+  position: relative;
+  width: 100%;
+  height: 220px;
   padding: 14px;
-  color: var(--accent);
+  min-height: 0;
 }
 
-.mini-timeline-chart svg {
-  width: 100%;
-  min-height: 176px;
-  color: var(--accent);
+.chart-shell canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.chart-shell-doughnut {
+  height: 220px;
+}
+
+.chart-empty {
+  margin: 14px;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+}
+
+.chart-total {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 14px 14px;
+  color: var(--muted);
+}
+
+.chart-total strong {
+  color: var(--ink);
+  font-size: 1.25rem;
+}
+
+.chart-footnotes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.chart-footnotes span {
+  min-width: 0;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-subtle);
 }
 
-.mini-timeline-chart circle {
-  fill: var(--surface);
-  stroke: var(--accent);
-  stroke-width: 3;
-}
-
-.timeline-labels {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.horizontal-bars {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-}
-
-.horizontal-bar-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(80px, 34%) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.horizontal-bar-row div {
-  min-width: 0;
-}
-
-.horizontal-bar-row strong,
-.horizontal-bar-row small {
+.chart-footnotes strong,
+.chart-footnotes small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.horizontal-bar-row small,
-.horizontal-bar-row em {
+.chart-footnotes strong {
+  color: var(--ink);
+  font-size: 0.8rem;
+}
+
+.chart-footnotes small {
   color: var(--muted);
-  font-size: 0.78rem;
-  font-style: normal;
-}
-
-.horizontal-bar-track {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-soft);
-}
-
-.horizontal-bar-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
+  font-size: 0.74rem;
 }
 
 .summary-card {
@@ -3197,6 +3195,10 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .chart-footnotes {
+    grid-template-columns: 1fr;
+  }
+
   .chat-panel {
     min-height: 620px;
   }
@@ -3298,6 +3300,13 @@ textarea:focus-visible {
 
   .summary-card {
     padding: 12px;
+  }
+
+  .chart-shell,
+  .chart-shell-doughnut,
+  .chart-empty {
+    height: 200px;
+    min-height: 200px;
   }
 
   .agents-console-summary,
