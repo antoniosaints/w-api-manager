@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 const mainSource = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
 const apiSource = readFileSync(new URL('../src/shared/api.js', import.meta.url), 'utf8');
 const shellSource = readFileSync(new URL('../src/components/AppShell.jsx', import.meta.url), 'utf8');
+const chatWindowSource = readFileSync(new URL('../src/components/chat/ChatWindow.jsx', import.meta.url), 'utf8');
+const messageBubbleSource = readFileSync(new URL('../src/components/chat/MessageBubble.jsx', import.meta.url), 'utf8');
 const settingsSource = readFileSync(new URL('../src/pages/SettingsPanel.jsx', import.meta.url), 'utf8');
 const usersSource = readFileSync(new URL('../src/pages/UsersPanel.jsx', import.meta.url), 'utf8');
 const stylesSource = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -34,19 +36,19 @@ test('changing inbox tabs waits for the user to choose a conversation', () => {
 test('inbox exposes group tab and group sender labels', () => {
   assert.match(mainSource, /Grupos/);
   assert.match(mainSource, /isGroup/);
-  assert.match(mainSource, /senderName/);
-  assert.match(mainSource, /message-sender-label/);
-  assert.match(mainSource, /showSenderName/);
-  assert.match(mainSource, /selectedConversation\?\.isGroup/);
+  assert.match(messageBubbleSource, /senderName/);
+  assert.match(messageBubbleSource, /message-sender-label/);
+  assert.match(messageBubbleSource, /showSenderName/);
+  assert.match(chatWindowSource, /selectedConversation\?\.isGroup/);
   assert.match(mainSource, /selected\?\.isGroup/);
 });
 
 test('chat has attend, reopen, finish and session delete actions', () => {
-  assert.match(mainSource, /Atender/);
-  assert.match(mainSource, /Reabrir/);
-  assert.match(mainSource, /Finalizar/);
-  assert.match(mainSource, /Apagar/);
-  assert.match(mainSource, /canReply/);
+  assert.match(chatWindowSource, /Assumir/);
+  assert.match(chatWindowSource, /Reabrir/);
+  assert.match(chatWindowSource, /Finalizar/);
+  assert.match(chatWindowSource, /danger-action/);
+  assert.match(chatWindowSource, /canReply/);
 });
 
 test('server exposes conversation lifecycle endpoints', () => {
@@ -59,8 +61,8 @@ test('history menu and dashboard support metrics are wired', () => {
   assert.match(mainSource, /'history'/);
   assert.match(mainSource, /Historico/);
   assert.match(mainSource, /HistoryPanel/);
-  assert.match(mainSource, /periodFilter/);
-  assert.match(mainSource, /Suportes por usuario/);
+  assert.match(mainSource, /buildHistoryQuery/);
+  assert.match(mainSource, /Atendimentos por usuario/);
 });
 
 test('auth, users, transfer and dashboard screens are wired in the UI', () => {
@@ -98,19 +100,19 @@ test('collapsed sidebar keeps toggle aligned and gives nav icons consistent padd
 });
 
 test('composer supports media upload, enter send, ctrl-enter newline and message reply context', () => {
-  assert.match(mainSource, /composer-shell/);
-  assert.match(mainSource, /composer-bar/);
-  assert.match(mainSource, /fileInputRef/);
-  assert.match(mainSource, /MEDIA_FILE_ACCEPT/);
-  assert.match(mainSource, /mediaDraft/);
-  assert.match(mainSource, /validateMediaFile/);
-  assert.match(mainSource, /onKeyDown=\{handleComposerKeyDown\}/);
-  assert.match(mainSource, /Digite uma mensagem/);
-  assert.match(mainSource, /event\.key === 'Enter'/);
-  assert.match(mainSource, /event\.ctrlKey/);
-  assert.match(mainSource, /replyingTo/);
-  assert.match(mainSource, /replyToMessageId/);
-  assert.match(mainSource, /message-reply-action/);
+  assert.match(chatWindowSource, /composer-shell/);
+  assert.match(chatWindowSource, /composer-bar/);
+  assert.match(chatWindowSource, /fileInputRef/);
+  assert.match(chatWindowSource, /MEDIA_FILE_ACCEPT/);
+  assert.match(chatWindowSource, /mediaDraft/);
+  assert.match(chatWindowSource, /validateMediaFile/);
+  assert.match(chatWindowSource, /onKeyDown=\{handleComposerKeyDown\}/);
+  assert.match(chatWindowSource, /Digite uma mensagem/);
+  assert.match(chatWindowSource, /event\.key === 'Enter'/);
+  assert.match(chatWindowSource, /event\.ctrlKey/);
+  assert.match(chatWindowSource, /replyingTo/);
+  assert.match(chatWindowSource, /replyToMessageId/);
+  assert.match(messageBubbleSource, /message-reply-action/);
   assert.match(stylesSource, /\.composer-shell/);
   assert.match(stylesSource, /\.composer-bar/);
   assert.match(stylesSource, /\.composer-preview/);
@@ -202,12 +204,60 @@ test('agents menu, accent picker, sectors and attendance tags are wired', () => 
   assert.match(serverSource, /\/api\/auth\/me\/preferences/);
 });
 
+test('supervisor role has operational menus without admin-only system access', () => {
+  const navigationSource = readFileSync(new URL('../src/app/navigation.jsx', import.meta.url), 'utf8');
+  const agentsSource = readFileSync(new URL('../src/pages/AgentsPanel.jsx', import.meta.url), 'utf8');
+
+  assert.match(navigationSource, /supervisor/);
+  assert.match(navigationSource, /allowedRoles/);
+  assert.match(navigationSource, /'agents'[\s\S]*supervisor/);
+  assert.match(usersSource, /Supervisor/);
+  assert.match(serverSource, /requireAdminOrSupervisor/);
+  assert.match(serverSource, /app\.get\('\/api\/history\/sessions'/);
+  assert.match(agentsSource, /canManageAutomationSettings/);
+  assert.match(agentsSource, /currentUser\?\.role === 'admin'/);
+});
+
+test('chat action header uses an organization modal and admin-only deletion', () => {
+  const chatWindowSource = readFileSync(new URL('../src/components/chat/ChatWindow.jsx', import.meta.url), 'utf8');
+
+  assert.match(chatWindowSource, /SupportOrganizationModal/);
+  assert.match(chatWindowSource, /Organizar/);
+  assert.match(chatWindowSource, /Assumir/);
+  assert.match(chatWindowSource, /onOpenContact/);
+  assert.match(chatWindowSource, /currentUser\?\.role === 'admin'/);
+  assert.match(chatWindowSource, /removeTag/);
+  assert.doesNotMatch(chatWindowSource, /<option value="">Tag<\/option>/);
+  assert.doesNotMatch(chatWindowSource, /title="Setor do atendimento"/);
+});
+
+test('history status labels and chat contact editing stay wired', () => {
+  const inboxStart = mainSource.indexOf('function Inbox({');
+  const inboxEnd = mainSource.indexOf('function getEmptyTabCopy', inboxStart);
+  const inboxSource = mainSource.slice(inboxStart, inboxEnd);
+
+  assert.match(mainSource, /function getConversationStatusLabel\(status\)/);
+  assert.match(mainSource, /getConversationStatusLabel\(item\.chatStatus\)/);
+  assert.match(mainSource, /getConversationStatusLabel\(selected\.chatStatus\)/);
+  assert.match(mainSource, /onOpenContact=\{openContactFromConversation\}/);
+  assert.match(inboxSource, /onOpenContact,/);
+  assert.match(inboxSource, /onOpenContact=\{onOpenContact\}/);
+  assert.match(chatWindowSource, /onClick=\{\(\) => onOpenContact\?\.\(selectedConversation\)\}/);
+  assert.match(mainSource, /api\(`\/api\/contacts\/\$\{conversation\.contactId\}`\)/);
+});
+
 test('user menu exposes device push toggle and app registers a service worker', () => {
   assert.match(shellSource, /Push no dispositivo/);
   assert.match(shellSource, /onTogglePushNotifications/);
   assert.match(mainSource, /registerAppServiceWorker/);
+  assert.match(mainSource, /useDevicePushState\(currentUser\)/);
+  assert.match(mainSource, /pushEnabled=\{devicePushEnabled\}/);
+  assert.doesNotMatch(mainSource, /pushEnabled=\{Boolean\(currentUser\?\.pushEnabled\)\}/);
   assert.match(pwaSource, /enablePushNotifications/);
   assert.match(pwaSource, /disablePushNotifications/);
+  assert.match(pwaSource, /getCurrentPushSubscription/);
+  assert.match(runtimeSource, /isPushEnabledForCurrentBrowser/);
+  assert.doesNotMatch(runtimeSource, /currentUser\?\.pushEnabled/);
   assert.match(serverSource, /\/api\/push\/public-key/);
   assert.match(serverSource, /\/api\/push\/subscribe/);
   assert.match(serverSource, /\/api\/push\/unsubscribe/);

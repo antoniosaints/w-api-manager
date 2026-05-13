@@ -12,17 +12,27 @@ import {
 } from 'lucide-react';
 
 export const navItems = [
-  ['dashboard', BarChart3, 'Dashboard', 'Insights centrais'],
-  ['inbox', MessageCircle, 'Atendimento', 'Fila e conversas'],
-  ['history', History, 'Historico', 'Consulta geral'],
-  ['agents', Bot, 'Agentes', 'IA e setores', 'admin'],
-  ['users', Users, 'Usuarios', 'Equipe e acessos', 'admin'],
-  ['contacts', Navigation, 'Contatos', 'CRM leve'],
-  ['send', Send, 'Enviar', 'Mensagem direta'],
-  ['connection', Smartphone, 'Conexao', 'Status e QR Code', 'admin'],
-  ['webhooks', Webhook, 'Webhooks', 'Tempo real', 'admin'],
-  ['settings', Settings, 'Ajustes', 'Credenciais locais', 'admin']
+  ['dashboard', BarChart3, 'Dashboard', 'Insights centrais', ['admin', 'supervisor', 'attendant']],
+  ['inbox', MessageCircle, 'Atendimento', 'Fila e conversas', ['admin', 'supervisor', 'attendant']],
+  ['history', History, 'Historico', 'Consulta geral', ['admin', 'supervisor']],
+  ['agents', Bot, 'Agentes', 'IA e setores', ['admin', 'supervisor']],
+  ['users', Users, 'Usuarios', 'Equipe e acessos', ['admin']],
+  ['contacts', Navigation, 'Contatos', 'CRM leve', ['admin', 'supervisor', 'attendant']],
+  ['send', Send, 'Enviar', 'Mensagem direta', ['admin']],
+  ['connection', Smartphone, 'Conexao', 'Status e QR Code', ['admin']],
+  ['webhooks', Webhook, 'Webhooks', 'Tempo real', ['admin']],
+  ['settings', Settings, 'Ajustes', 'Credenciais locais', ['admin']]
 ];
+
+export function allowedRoles(item) {
+  return item?.[4] || [];
+}
+
+export function canAccessView(view, role) {
+  const item = navItems.find(([key]) => key === view);
+  if (!item) return false;
+  return allowedRoles(item).includes(role);
+}
 
 export const pageMeta = {
   dashboard: ['Dashboard', 'Centralize os principais insights da operacao.'],

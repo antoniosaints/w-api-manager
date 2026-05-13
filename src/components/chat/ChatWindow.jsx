@@ -5,8 +5,8 @@ import {
   CornerUpLeft,
   Loader2,
   MessageCircle,
+  MoreHorizontal,
   Mic,
-  Navigation,
   Paperclip,
   RotateCcw,
   Send,
@@ -23,6 +23,7 @@ import { API, api } from '../../shared/api.js';
 import { formatTime, initials, isPlaceholderBody } from '../../shared/format.js';
 import { getMessageMedia } from '../../media.js';
 import { MEDIA_FILE_ACCEPT, formatBytes, formatDuration, prepareMediaFile, validateMediaFile } from '../../media-config.js';
+import { Button, Checkbox, Modal, Select } from '../ui/index.js';
 import { ImagePreSendModal } from './ImagePreSendModal.jsx';
 import { MediaLabelIcon, MessageBubble, getMessageMediaLabel } from './MessageBubble.jsx';
 
@@ -39,6 +40,7 @@ export function ChatWindow({
   onTagsChange,
   onSectorChange,
   onSaveContact,
+  onOpenContact,
   users = [],
   sectors = [],
   supportTags = [],
@@ -52,6 +54,7 @@ export function ChatWindow({
   const [imagePreSendDraft, setImagePreSendDraft] = useState(null);
   const [replyingTo, setReplyingTo] = useState(null);
   const [transferTarget, setTransferTarget] = useState('');
+  const [organizationOpen, setOrganizationOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [recordingState, setRecordingState] = useState('idle');
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -71,6 +74,8 @@ export function ChatWindow({
   const canReply = chatStatus === 'active';
   const transferUsers = users.filter((user) => user.active && user.id !== currentUser?.id);
   const currentTagIds = (selectedConversation?.tags || []).map((tag) => tag.id);
+  const canDelete = currentUser?.role === 'admin';
+  const canOpenContact = Boolean(selectedConversation?.contactId);
   const isRecording = recordingState === 'recording';
   const isProcessingRecording = recordingState === 'processing';
 
@@ -352,38 +357,26 @@ export function ChatWindow({
       <div className="chat-header justify-between">
         <div className="flex items-center gap-2">
           <ContactAvatar contact={selectedConversation} fallback={selectedPhone} large />
-          <div className="chat-title-copy">
+          <button
+            type="button"
+            className="chat-title-copy chat-contact-trigger"
+            onClick={() => onOpenContact?.(selectedConversation)}
+            title={canOpenContact ? 'Editar contato' : 'Salvar contato'}
+          >
             <strong>{selectedConversation?.name || selectedPhone}</strong>
             <ConversationTags conversation={selectedConversation} />
             <small>{selectedPhone} · {getConversationStatusLabel(chatStatus)}</small>
-          </div>
+          </button>
         </div>
         <div className="chat-actions">
-          <label className="transfer-control">
-            <Tags size={16} />
-            <select value="" onChange={(event) => {
-              const tagId = event.target.value;
-              if (tagId && !currentTagIds.includes(tagId)) onTagsChange?.(selectedSessionId, [...currentTagIds, tagId]);
-            }} title="Adicionar tag">
-              <option value="">Tag</option>
-              {supportTags.filter((tag) => tag.active && !currentTagIds.includes(tag.id)).map((tag) => (
-                <option key={tag.id} value={tag.id}>{tag.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="transfer-control">
-            <Navigation size={16} />
-            <select value={selectedConversation?.sectorId || ''} onChange={(event) => onSectorChange?.(selectedSessionId, event.target.value)} title="Setor do atendimento">
-              <option value="">Setor</option>
-              {sectors.filter((sector) => sector.active).map((sector) => (
-                <option key={sector.id} value={sector.id}>{sector.name}</option>
-              ))}
-            </select>
-          </label>
+          <button type="button" className="secondary-action compact-action" onClick={() => setOrganizationOpen(true)}>
+            <MoreHorizontal size={17} />
+            Organizar
+          </button>
           {chatStatus === 'waiting' && (
             <button type="button" className="secondary-action compact-action" onClick={() => onAttend(selectedSessionId)}>
               <UserCheck size={17} />
-              Atender
+              Assumir
             </button>
           )}
           {chatStatus === 'finished' && (
@@ -393,40 +386,27 @@ export function ChatWindow({
             </button>
           )}
           {chatStatus === 'active' && (
-            <>
-              <label className="transfer-control">
-                <Users size={16} />
-                <select value={transferTarget} onChange={(event) => setTransferTarget(event.target.value)} title="Transferir atendimento">
-                  <option value="">Transferir</option>
-                  {transferUsers.map((user) => (
-                    <option key={user.id} value={`user:${user.id}`}>{user.name}</option>
-                  ))}
-                  {sectors.filter((sector) => sector.active).map((sector) => (
-                    <option key={sector.id} value={`sector:${sector.id}`}>Setor: {sector.name}</option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" className="secondary-action compact-action" disabled={!transferTarget} onClick={() => onTransfer?.(selectedSessionId, transferTarget)}>
-                <MessageSquareShareIcon size={17} />
-              </button>
-              <button type="button" className="secondary-action compact-action" onClick={() => onFinish(selectedSessionId)}>
-                <CheckCircle2 size={17} />
-                Finalizar
-              </button>
-            </>
+            <button type="button" className="secondary-action compact-action" onClick={() => onFinish(selectedSessionId)}>
+              <CheckCircle2 size={17} />
+              Finalizar
+            </button>
           )}
-          <button type="button" className="secondary-action compact-action" onClick={() => onSaveContact?.({
-            phone: selectedPhone,
-            name: selectedConversation?.name || '',
-            avatarUrl: selectedConversation?.avatarUrl || '',
-            isGroup: Boolean(selectedConversation?.isGroup),
-            source: 'chat'
-          })}>
-            <UserPlus size={17} />
-          </button>
-          <button type="button" className="secondary-action compact-action danger-action" onClick={() => onDelete(selectedSessionId)}>
-            <Trash2 size={17} />
-          </button>
+          {!selectedConversation?.contactId && (
+            <button type="button" className="secondary-action compact-action" onClick={() => onSaveContact?.({
+              phone: selectedPhone,
+              name: selectedConversation?.name || '',
+              avatarUrl: selectedConversation?.avatarUrl || '',
+              isGroup: Boolean(selectedConversation?.isGroup),
+              source: 'chat'
+            })}>
+              <UserPlus size={17} />
+            </button>
+          )}
+          {canDelete && (
+            <button type="button" className="secondary-action compact-action danger-action" onClick={() => onDelete(selectedSessionId)}>
+              <Trash2 size={17} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -524,7 +504,111 @@ export function ChatWindow({
           onConfirm={confirmImagePreSend}
         />
       )}
+      {organizationOpen && (
+        <SupportOrganizationModal
+          conversation={selectedConversation}
+          sessionId={selectedSessionId}
+          currentTagIds={currentTagIds}
+          supportTags={supportTags}
+          sectors={sectors}
+          transferUsers={transferUsers}
+          transferTarget={transferTarget}
+          setTransferTarget={setTransferTarget}
+          onTagsChange={onTagsChange}
+          onSectorChange={onSectorChange}
+          onTransfer={onTransfer}
+          onClose={() => setOrganizationOpen(false)}
+        />
+      )}
     </section>
+  );
+}
+
+function SupportOrganizationModal({
+  conversation,
+  sessionId,
+  currentTagIds,
+  supportTags,
+  sectors,
+  transferUsers,
+  transferTarget,
+  setTransferTarget,
+  onTagsChange,
+  onSectorChange,
+  onTransfer,
+  onClose
+}) {
+  const activeTags = supportTags.filter((tag) => tag.active || currentTagIds.includes(tag.id));
+  const activeSectors = sectors.filter((sector) => sector.active || sector.id === conversation?.sectorId);
+
+  function addTag(tagId) {
+    if (!tagId || currentTagIds.includes(tagId)) return;
+    onTagsChange?.(sessionId, [...currentTagIds, tagId]);
+  }
+
+  function removeTag(tagId) {
+    onTagsChange?.(sessionId, currentTagIds.filter((id) => id !== tagId));
+  }
+
+  return (
+    <Modal
+      title="Organizar atendimento"
+      description="Tags, setor e transferencia do atendimento atual."
+      onClose={onClose}
+      footer={<><Button onClick={onClose}>Fechar</Button><Button variant="primary" disabled={!transferTarget} onClick={() => onTransfer?.(sessionId, transferTarget)}><MessageSquareShareIcon size={18} />Transferir</Button></>}
+    >
+      <div className="support-organization-modal">
+        <section className="support-organization-section">
+          <div className="support-organization-heading">
+            <Tags size={17} />
+            <strong>Tags</strong>
+          </div>
+          <div className="tag-chip-grid">
+            {activeTags.map((tag) => (
+              <Checkbox
+                key={tag.id}
+                label={tag.name}
+                checked={currentTagIds.includes(tag.id)}
+                onChange={(event) => {
+                  if (event.target.checked) addTag(tag.id);
+                  else removeTag(tag.id);
+                }}
+              />
+            ))}
+            {!activeTags.length && <p className="empty">Nenhuma tag ativa.</p>}
+          </div>
+        </section>
+
+        <section className="support-organization-section">
+          <div className="support-organization-heading">
+            <MessageSquareShareIcon size={17} />
+            <strong>Setor</strong>
+          </div>
+          <Select value={conversation?.sectorId || ''} onChange={(event) => onSectorChange?.(sessionId, event.target.value)}>
+            <option value="">Sem setor</option>
+            {activeSectors.map((sector) => (
+              <option key={sector.id} value={sector.id}>{sector.name}</option>
+            ))}
+          </Select>
+        </section>
+
+        <section className="support-organization-section">
+          <div className="support-organization-heading">
+            <Users size={17} />
+            <strong>Transferir</strong>
+          </div>
+          <Select value={transferTarget} onChange={(event) => setTransferTarget(event.target.value)}>
+            <option value="">Selecionar destino</option>
+            {transferUsers.map((user) => (
+              <option key={user.id} value={`user:${user.id}`}>{user.name}</option>
+            ))}
+            {sectors.filter((sector) => sector.active).map((sector) => (
+              <option key={sector.id} value={`sector:${sector.id}`}>Setor: {sector.name}</option>
+            ))}
+          </Select>
+        </section>
+      </div>
+    </Modal>
   );
 }
 

@@ -1,11 +1,31 @@
-import { useEffect } from 'react';
-import { setAppUnreadBadge, syncPushSubscription } from '../pwa.js';
+import { useCallback, useEffect, useState } from 'react';
+import { isPushEnabledForCurrentBrowser, setAppUnreadBadge, syncPushSubscription } from '../pwa.js';
 
 export function usePushSync(currentUser) {
   useEffect(() => {
-    if (!currentUser?.pushEnabled) return;
-    syncPushSubscription(true).catch(() => null);
-  }, [currentUser?.id, currentUser?.pushEnabled]);
+    if (!currentUser) return;
+    syncPushSubscription().catch(() => null);
+  }, [currentUser?.id]);
+}
+
+export function useDevicePushState(currentUser) {
+  const [devicePushEnabled, setDevicePushEnabled] = useState(false);
+
+  const refreshDevicePushEnabled = useCallback(async () => {
+    if (!currentUser) {
+      setDevicePushEnabled(false);
+      return false;
+    }
+    const enabled = await isPushEnabledForCurrentBrowser();
+    setDevicePushEnabled(enabled);
+    return enabled;
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    refreshDevicePushEnabled().catch(() => setDevicePushEnabled(false));
+  }, [refreshDevicePushEnabled]);
+
+  return { devicePushEnabled, setDevicePushEnabled, refreshDevicePushEnabled };
 }
 
 export function useUnreadAppBadge({ currentUser, conversations }) {

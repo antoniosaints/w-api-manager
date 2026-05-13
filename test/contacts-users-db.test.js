@@ -608,7 +608,7 @@ test('users can toggle push notification preference', () => {
   assert.equal(updated.pushEnabled, true);
 });
 
-test('push subscriptions are persisted only for active users with push enabled', () => {
+test('push subscriptions are delivered per saved browser subscription for active users', () => {
   const suffix = Date.now();
   const enabledUser = createUser({
     name: `Push Ativo ${suffix}`,
@@ -651,7 +651,7 @@ test('push subscriptions are persisted only for active users with push enabled',
   assert.equal(first.endpoint, `https://push.example.test/sub-${suffix}`);
   assert.equal(first.deviceLabel, 'Desktop');
   assert.equal(listed.some((item) => item.userId === enabledUser.id), true);
-  assert.equal(listed.some((item) => item.userId === disabledUser.id), false);
+  assert.equal(listed.some((item) => item.userId === disabledUser.id), true);
 });
 
 test('saving the same push endpoint updates the device record instead of duplicating it', () => {

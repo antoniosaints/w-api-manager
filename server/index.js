@@ -29,6 +29,7 @@ import {
   getAiAgentById,
   listConversations,
   listContacts,
+  listHistorySessions,
   listMessages,
   listAiAgents,
   listSectors,
@@ -204,59 +205,59 @@ app.delete('/api/users/:id', requireAdmin, (req, res) => {
 });
 
 app.get('/api/sectors', (req, res) => {
-  res.json(listSectors({ activeOnly: req.user.role !== 'admin' }));
+  res.json(listSectors({ activeOnly: !isAdminOrSupervisor(req.user) }));
 });
 
-app.post('/api/sectors', requireAdmin, (req, res) => {
+app.post('/api/sectors', requireAdminOrSupervisor, (req, res) => {
   res.status(201).json({ sector: createSector(req.body || {}) });
 });
 
-app.patch('/api/sectors/:id', requireAdmin, (req, res) => {
+app.patch('/api/sectors/:id', requireAdminOrSupervisor, (req, res) => {
   const sector = saveSector({ ...req.body, id: req.params.id });
   if (!sector) return res.status(404).json({ message: 'Setor nao encontrado.' });
   res.json({ sector });
 });
 
-app.delete('/api/sectors/:id', requireAdmin, (req, res) => {
+app.delete('/api/sectors/:id', requireAdminOrSupervisor, (req, res) => {
   if (!deleteSector(req.params.id)) return res.status(404).json({ message: 'Setor nao encontrado.' });
   emitConversations();
   res.json({ ok: true });
 });
 
 app.get('/api/support-tags', (req, res) => {
-  res.json(listSupportTags({ activeOnly: req.user.role !== 'admin' }));
+  res.json(listSupportTags({ activeOnly: !isAdminOrSupervisor(req.user) }));
 });
 
-app.post('/api/support-tags', requireAdmin, (req, res) => {
+app.post('/api/support-tags', requireAdminOrSupervisor, (req, res) => {
   res.status(201).json({ tag: createSupportTag(req.body || {}) });
 });
 
-app.patch('/api/support-tags/:id', requireAdmin, (req, res) => {
+app.patch('/api/support-tags/:id', requireAdminOrSupervisor, (req, res) => {
   const tag = saveSupportTag({ ...req.body, id: req.params.id });
   if (!tag) return res.status(404).json({ message: 'Tag nao encontrada.' });
   res.json({ tag });
 });
 
-app.delete('/api/support-tags/:id', requireAdmin, (req, res) => {
+app.delete('/api/support-tags/:id', requireAdminOrSupervisor, (req, res) => {
   if (!deleteSupportTag(req.params.id)) return res.status(404).json({ message: 'Tag nao encontrada.' });
   emitConversations();
   res.json({ ok: true });
 });
 
-app.get('/api/ai-agents', requireAdmin, (_req, res) => {
+app.get('/api/ai-agents', requireAdminOrSupervisor, (_req, res) => {
   res.json(listAiAgents());
 });
 
-app.post('/api/ai-agents', requireAdmin, (req, res) => {
+app.post('/api/ai-agents', requireAdminOrSupervisor, (req, res) => {
   res.status(201).json({ agent: createAiAgent(req.body || {}) });
 });
 
-app.patch('/api/ai-agents/:id', requireAdmin, (req, res) => {
+app.patch('/api/ai-agents/:id', requireAdminOrSupervisor, (req, res) => {
   if (!getAiAgentById(req.params.id)) return res.status(404).json({ message: 'Agente nao encontrado.' });
   res.json({ agent: saveAiAgent({ ...req.body, id: req.params.id }) });
 });
 
-app.delete('/api/ai-agents/:id', requireAdmin, (req, res) => {
+app.delete('/api/ai-agents/:id', requireAdminOrSupervisor, (req, res) => {
   if (!deleteAiAgent(req.params.id)) return res.status(404).json({ message: 'Agente nao encontrado.' });
   res.json({ ok: true });
 });
@@ -295,6 +296,10 @@ app.get('/api/support-sessions', (req, res) => {
   res.json(listSupportSessions({ ...parsePeriodQuery(req.query), viewer: req.user }));
 });
 
+app.get('/api/history/sessions', requireAdminOrSupervisor, (req, res) => {
+  res.json(listHistorySessions({ ...parseHistoryQuery(req.query), viewer: req.user }));
+});
+
 app.get('/api/support-metrics', (req, res) => {
   res.json(buildSupportMetrics({ ...parsePeriodQuery(req.query), viewer: req.user }));
 });
@@ -328,6 +333,9 @@ app.patch('/api/support-sessions/:id/read', (req, res) => {
 });
 
 app.patch('/api/support-sessions/:id/status', (req, res) => {
+  if (!canAccessSupportSession(req.params.id, req.user)) {
+    return res.status(403).json({ message: 'Atendimento fora da sua responsabilidade.' });
+  }
   const conversation = updateSupportSessionStatus(req.params.id, req.body?.status, req.user);
   if (!conversation) {
     return res.status(404).json({ message: 'Atendimento nao encontrado.' });
@@ -338,6 +346,9 @@ app.patch('/api/support-sessions/:id/status', (req, res) => {
 });
 
 app.post('/api/support-sessions/:id/reopen', (req, res) => {
+  if (!canAccessSupportSession(req.params.id, req.user)) {
+    return res.status(403).json({ message: 'Atendimento fora da sua responsabilidade.' });
+  }
   const conversation = reopenSupportSession(req.params.id, req.user);
   if (!conversation) {
     return res.status(404).json({ message: 'Atendimento nao encontrado.' });
@@ -348,6 +359,9 @@ app.post('/api/support-sessions/:id/reopen', (req, res) => {
 });
 
 app.post('/api/support-sessions/:id/transfer', (req, res) => {
+  if (!canAccessSupportSession(req.params.id, req.user)) {
+    return res.status(403).json({ message: 'Atendimento fora da sua responsabilidade.' });
+  }
   const conversation = transferSupportSession(req.params.id, {
     targetUserId: req.body?.targetUserId,
     targetSectorId: req.body?.targetSectorId
@@ -380,7 +394,7 @@ app.patch('/api/support-sessions/:id/sector', (req, res) => {
   res.json({ conversation });
 });
 
-app.delete('/api/support-sessions/:id', (req, res) => {
+app.delete('/api/support-sessions/:id', requireAdmin, (req, res) => {
   if (!deleteSupportSession(req.params.id)) {
     return res.status(404).json({ message: 'Atendimento nao encontrado.' });
   }
@@ -461,8 +475,7 @@ app.post('/api/messages/send', asyncHandler(async (req, res) => {
   const outboundBody = applyMessageNameHeader(body, req.user);
   const media = resolveOutboundMedia(req.body || {});
   const hasMedia = Boolean(media);
-  const wapiMedia = hasMedia ? await prepareAudioForWapi(media) : null;
-  const storedMedia = hasMedia ? persistOutboundMediaReference(wapiMedia) : null;
+  const sessionId = String(req.body?.sessionId || '').trim();
   const replyToMessageId = String(req.body?.replyToMessageId || '').trim() || null;
   const replyToExternalId = String(req.body?.replyToExternalId || '').trim();
   const replyPreview = String(req.body?.replyPreview || '').trim().slice(0, 220) || null;
@@ -470,14 +483,22 @@ app.post('/api/messages/send', asyncHandler(async (req, res) => {
   if (!phone || (!body && !hasMedia)) {
     return res.status(400).json({ message: 'Informe telefone e mensagem ou midia.' });
   }
+  if (!sessionId && req.user?.role !== 'admin') {
+    return res.status(403).json({ message: 'Envio direto restrito ao administrador.' });
+  }
+  if (sessionId && !canAccessSupportSession(sessionId, req.user)) {
+    return res.status(403).json({ message: 'Atendimento fora da sua responsabilidade.' });
+  }
 
+  const wapiMedia = hasMedia ? await prepareAudioForWapi(media) : null;
+  const storedMedia = hasMedia ? persistOutboundMediaReference(wapiMedia) : null;
   const result = hasMedia
     ? await sendWapiMediaMessage({ phone, body: outboundBody, media: wapiMedia, messageId: replyToExternalId })
     : await sendTextMessage({ phone, message: outboundBody, messageId: replyToExternalId });
   const mediaRaw = buildMediaRawMetadata(storedMedia || wapiMedia);
   const message = createMessage({
     phone,
-    sessionId: req.body?.sessionId || null,
+    sessionId: sessionId || null,
     direction: 'outbound',
     type: hasMedia ? wapiMedia.type : 'text',
     body: outboundBody || (hasMedia ? mediaFallbackText(wapiMedia.type) : ''),
@@ -602,6 +623,17 @@ function requireAdmin(req, res, next) {
     return res.status(403).json({ message: 'Acesso restrito ao administrador.' });
   }
   next();
+}
+
+function requireAdminOrSupervisor(req, res, next) {
+  if (!isAdminOrSupervisor(req.user)) {
+    return res.status(403).json({ message: 'Acesso restrito ao administrador ou supervisor.' });
+  }
+  next();
+}
+
+function isAdminOrSupervisor(user) {
+  return ['admin', 'supervisor'].includes(user?.role);
 }
 
 app.use((error, _req, res, _next) => {
@@ -754,6 +786,18 @@ function parsePeriodQuery(query) {
   return {
     from: query?.from ? String(query.from) : '',
     to: query?.to ? String(query.to) : ''
+  };
+}
+
+function parseHistoryQuery(query) {
+  return {
+    ...parsePeriodQuery(query),
+    search: query?.search ? String(query.search) : '',
+    status: query?.status ? String(query.status) : '',
+    assignedUserId: query?.assignedUserId ? String(query.assignedUserId) : '',
+    sectorId: query?.sectorId ? String(query.sectorId) : '',
+    page: query?.page ? Number(query.page) : 1,
+    limit: query?.limit ? Number(query.limit) : 12
   };
 }
 

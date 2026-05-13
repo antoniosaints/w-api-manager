@@ -45,6 +45,7 @@ export function AgentsPanel({
   setSettings,
   users = [],
   onError,
+  currentUser,
   showToast,
 }) {
   const [agents, setAgents] = useState([]);
@@ -61,6 +62,7 @@ export function AgentsPanel({
   const [listSearch, setListSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [saving, setSaving] = useState("");
+  const canManageAutomationSettings = currentUser?.role === 'admin';
 
   const filteredAgents = filterManagementItems(
     agents,
@@ -307,39 +309,41 @@ export function AgentsPanel({
 
         {activeTab === "agents" && (
           <section className="agents-tab-panel" role="tabpanel">
-            <form className="agents-automation-card" onSubmit={saveGemini}>
-              <div className="agents-automation-copy">
-                <strong>Motor de atendimento</strong>
-                <small>{settings?.hasGeminiApiKey ? "Chave Gemini configurada" : "Configure a chave Gemini para ativar a IA"}</small>
-              </div>
-              <Input
-                label="Chave de API Gemini"
-                type="password"
-                value={geminiForm.geminiApiKey}
-                placeholder={settings?.hasGeminiApiKey ? "Chave ja configurada" : "Cole a chave do Gemini"}
-                onChange={(event) =>
-                  setGeminiForm({
-                    ...geminiForm,
-                    geminiApiKey: event.target.value,
-                  })
-                }
-              />
-              <Switch
-                label="Atendimento automatico"
-                help="O primeiro agente ativo responde filas em espera."
-                checked={geminiForm.automaticAttendance}
-                onChange={(event) =>
-                  setGeminiForm({
-                    ...geminiForm,
-                    automaticAttendance: event.target.checked,
-                  })
-                }
-              />
-              <Button variant="primary" disabled={saving === "gemini"}>
-                {saving === "gemini" ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
-                Salvar
-              </Button>
-            </form>
+            {canManageAutomationSettings && (
+              <form className="agents-automation-card" onSubmit={saveGemini}>
+                <div className="agents-automation-copy">
+                  <strong>Motor de atendimento</strong>
+                  <small>{settings?.hasGeminiApiKey ? "Chave Gemini configurada" : "Configure a chave Gemini para ativar a IA"}</small>
+                </div>
+                <Input
+                  label="Chave de API Gemini"
+                  type="password"
+                  value={geminiForm.geminiApiKey}
+                  placeholder={settings?.hasGeminiApiKey ? "Chave ja configurada" : "Cole a chave do Gemini"}
+                  onChange={(event) =>
+                    setGeminiForm({
+                      ...geminiForm,
+                      geminiApiKey: event.target.value,
+                    })
+                  }
+                />
+                <Switch
+                  label="Atendimento automatico"
+                  help="O primeiro agente ativo responde filas em espera."
+                  checked={geminiForm.automaticAttendance}
+                  onChange={(event) =>
+                    setGeminiForm({
+                      ...geminiForm,
+                      automaticAttendance: event.target.checked,
+                    })
+                  }
+                />
+                <Button variant="primary" disabled={saving === "gemini"}>
+                  {saving === "gemini" ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
+                  Salvar
+                </Button>
+              </form>
+            )}
 
             <ManagementHeader
               title="Agentes"
