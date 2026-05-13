@@ -48,6 +48,7 @@ import { SettingsPanel } from './pages/SettingsPanel.jsx';
 import { AgentsPanel } from './pages/AgentsPanel.jsx';
 import { useLaunchRouteSelection, usePushSync, useUnreadAppBadge, readLaunchRoute } from './app/runtime-effects.js';
 import { useUserPreferenceActions } from './app/user-preferences.js';
+import { mergeMessageUpdate } from './app/messages.js';
 import { getMessageMedia } from './media.js';
 import { MEDIA_FILE_ACCEPT, formatBytes, prepareMediaFile, validateMediaFile } from './media-config.js';
 import { registerAppServiceWorker } from './pwa.js';
@@ -1483,15 +1484,6 @@ function insertTextareaValue(textarea, value, setValue) {
     textarea.selectionStart = start + value.length;
     textarea.selectionEnd = start + value.length;
   });
-}
-
-function mergeMessageUpdate(items, item) {
-  const index = items.findIndex((current) => (
-    current.id === item.id
-    || (current.externalId && item.externalId && current.externalId === item.externalId)
-  ));
-  if (index === -1) return [...items, item];
-  return items.map((current, currentIndex) => currentIndex === index ? { ...current, ...item } : current);
 }
 
 createRoot(document.getElementById('root')).render(<App />);
