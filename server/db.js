@@ -1277,7 +1277,20 @@ function shouldKeepExistingRenderableMediaPath(existing = {}, nextMediaPath = ''
 function isWebhookStatusOnlyMessage(message = {}) {
   const type = String(message.type || '').trim().toLowerCase();
   const event = String(message.raw?.event || '').trim().toLowerCase();
-  return type === 'message-status' || event === 'webhookstatus';
+  if (type === 'message-status' || event === 'webhookstatus') return true;
+  return event === 'webhookdelivery' && !hasRenderableMediaUpdate(message);
+}
+
+function hasRenderableMediaUpdate(message = {}) {
+  const media = message.media && typeof message.media === 'object' ? message.media : {};
+  return Boolean(
+    message.mediaPath
+    || extractMediaPathFromRaw(message.raw)
+    || media.url
+    || media.mediaUrl
+    || media.link
+    || media.directPath
+  );
 }
 
 function isLocalUploadPath(value) {

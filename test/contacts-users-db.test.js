@@ -33,6 +33,7 @@ import {
   updateUser,
   updateUserThemeColor
 } from '../server/db.js';
+import { normalizeIncomingMessage } from '../server/normalize.js';
 
 test('test database is isolated from the app sqlite file', () => {
   assert.notEqual(db.name.endsWith('data\\app.sqlite') || db.name.endsWith('data/app.sqlite'), true);
@@ -192,6 +193,74 @@ test('outbound media webhook updates the sent message with official media metada
   assert.equal(raw.normalizedMedia.url, 'https://mmg.whatsapp.net/v/t62.7118-24/image.enc');
   assert.equal(raw.normalizedMedia.mediaKey, 'abc123');
   assert.equal(raw.normalizedMedia.directPath, '/v/t62.7118-24/image.enc?ccb=11-4&oh=token');
+});
+
+test('delivery webhook without renderable media keeps outbound image bubble intact', () => {
+  const phone = `5599${Date.now()}`;
+  const externalId = `delivery-empty-media-${Date.now()}`;
+  const sent = createMessage({
+    phone,
+    name: 'Cliente Delivery',
+    direction: 'outbound',
+    type: 'image',
+    body: 'Imagem enviada',
+    status: 'sent',
+    externalId,
+    mediaPath: '/uploads/outbound/delivery-image.png',
+    media: {
+      type: 'image',
+      url: '/uploads/outbound/delivery-image.png',
+      mimetype: 'image/png',
+      fileName: 'delivery-image.png',
+      size: 3210
+    },
+    raw: {
+      messageId: externalId,
+      normalizedMedia: {
+        type: 'image',
+        url: '/uploads/outbound/delivery-image.png',
+        mimetype: 'image/png'
+      }
+    }
+  });
+  const deliveryPayload = {
+    event: 'webhookDelivery',
+    instanceId: 'LITE-JKQPC1-D8V3MW',
+    connectedPhone: '559985560520',
+    isGroup: false,
+    messageId: externalId,
+    fromMe: true,
+    chat: { id: phone },
+    sender: { id: '559985560520', pushName: 'Noc', verifiedBizName: '' },
+    moment: 1778687974,
+    fromApi: true,
+    msgContent: {
+      message: {
+        documentMessage: {
+          fileSha256: null,
+          mediaKey: null,
+          fileEncSha256: null,
+          contextInfo: null
+        }
+      }
+    }
+  };
+  const normalized = normalizeIncomingMessage(deliveryPayload, 'delivery');
+
+  const updated = createMessage({
+    ...normalized,
+    direction: 'outbound',
+    status: 'SERVER'
+  });
+  const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(sent.id);
+  const raw = JSON.parse(row.raw_json);
+
+  assert.equal(updated.id, sent.id);
+  assert.equal(row.type, 'image');
+  assert.equal(row.body, 'Imagem enviada');
+  assert.equal(row.media_path, '/uploads/outbound/delivery-image.png');
+  assert.equal(row.status, 'SERVER');
+  assert.equal(raw.normalizedMedia.url, '/uploads/outbound/delivery-image.png');
 });
 
 test('message status webhooks do not create visible chat messages without an existing message', () => {
