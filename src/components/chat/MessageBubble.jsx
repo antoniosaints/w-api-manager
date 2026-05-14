@@ -15,6 +15,7 @@ import {
 import { getMessageMedia } from '../../media.js';
 import { formatBytes, formatDuration } from '../../media-config.js';
 import { formatTime, isPlaceholderBody } from '../../shared/format.js';
+import { renderFormattedMessageText } from './messageFormatting.js';
 
 export function MessageBubble({ message, onOpenMedia, onReply, canReply = false, showSenderName = false }) {
   if (message.direction === 'system') {
@@ -80,7 +81,7 @@ export function MessageBubble({ message, onOpenMedia, onReply, canReply = false,
           <Download size={17} />
         </a>
       )}
-      {hasText && <p>{message.body}</p>}
+      {hasText && renderFormattedMessageText(message.body)}
       {shouldRenderMediaCaption && (
         <p className="media-caption">
           <MediaLabelIcon type={media.type} size={15} />
