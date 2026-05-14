@@ -1741,15 +1741,49 @@ textarea:focus-visible {
   background: var(--bg-subtle);
 }
 
-.conversation-tabs {
+.conversation-tabs-shell {
+  min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  align-items: center;
   gap: 6px;
   padding: 12px 12px 0;
 }
 
-.conversation-tabs button {
+.conversation-tabs {
   min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.conversation-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.conversation-tabs-arrow {
+  width: 30px;
+  min-width: 30px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.conversation-tabs-arrow:hover {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+
+.conversation-tabs button {
+  min-width: 84px;
+  flex: 0 0 84px;
   min-height: 38px;
   display: grid;
   place-items: center;

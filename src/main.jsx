@@ -7,6 +7,8 @@ import {
   BarChart3,
   BellRing,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleDot,
   Clock3,
   History,
@@ -53,6 +55,7 @@ const socket = io(API, { transports: ['websocket', 'polling'], withCredentials: 
 
 const conversationTabs = [
   ['waiting', 'Espera'],
+  ['assigned', 'Atribuidos'],
   ['active', 'Ativos'],
   ['finished', 'Finalizados'],
   ['groups', 'Grupos']
@@ -1259,6 +1262,7 @@ function Inbox({
 }) {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState('waiting');
+  const conversationTabsRef = useRef(null);
   const filtered = conversations.filter((item) => {
     const haystack = `${item.name} ${item.phone} ${item.lastMessage?.body || ''}`.toLowerCase();
     return conversationMatchesTab(item, activeTab) && haystack.includes(query.toLowerCase());
@@ -1269,14 +1273,18 @@ function Inbox({
   }, {});
 
   useEffect(() => {
-    if (selectedConversation?.isGroup && activeTab !== 'groups') {
-      setActiveTab('groups');
-      return;
-    }
-    if (selectedConversation && !selectedConversation.isGroup && (selectedConversation.chatStatus || 'waiting') !== activeTab) {
-      setActiveTab(selectedConversation.chatStatus || 'waiting');
-    }
+    const selectedTab = getConversationTab(selectedConversation);
+    if (selectedTab && selectedTab !== activeTab) setActiveTab(selectedTab);
   }, [activeTab, selectedConversation]);
+
+  function scrollConversationTabs(direction) {
+    const node = conversationTabsRef.current;
+    if (!node) return;
+    node.scrollBy({
+      left: direction * Math.max(140, Math.round(node.clientWidth * 0.8)),
+      behavior: 'smooth'
+    });
+  }
 
   return (
     <section className="inbox-layout">
@@ -1289,21 +1297,41 @@ function Inbox({
           <BellRing size={20} />
         </div> */}
 
-        <div className="conversation-tabs" role="tablist" aria-label="Status das conversas">
-          {conversationTabs.map(([status, label]) => (
-            <button
-              key={status}
-              type="button"
-              className={activeTab === status ? 'active' : ''}
-              onClick={() => {
-                setActiveTab(status);
-                setSelectedConversationId('');
-              }}
-            >
-              <span>{label}</span>
-              <strong>{counts[status] || 0}</strong>
-            </button>
-          ))}
+        <div className="conversation-tabs-shell">
+          <button
+            type="button"
+            className="conversation-tabs-arrow"
+            onClick={() => scrollConversationTabs(-1)}
+            title="Ver abas anteriores"
+            aria-label="Ver abas anteriores"
+          >
+            <ChevronLeft size={17} />
+          </button>
+          <div ref={conversationTabsRef} className="conversation-tabs" role="tablist" aria-label="Status das conversas">
+            {conversationTabs.map(([status, label]) => (
+              <button
+                key={status}
+                type="button"
+                className={activeTab === status ? 'active' : ''}
+                onClick={() => {
+                  setActiveTab(status);
+                  setSelectedConversationId('');
+                }}
+              >
+                <span>{label}</span>
+                <strong>{counts[status] || 0}</strong>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="conversation-tabs-arrow"
+            onClick={() => scrollConversationTabs(1)}
+            title="Ver proximas abas"
+            aria-label="Ver proximas abas"
+          >
+            <ChevronRight size={17} />
+          </button>
         </div>
 
         <label className="search-box">
@@ -1361,6 +1389,7 @@ function Inbox({
 
 function getEmptyTabCopy(status) {
   if (status === 'groups') return 'Nenhum grupo recebido. Ajustes podem ignorar eventos de grupo.';
+  if (status === 'assigned') return 'Nenhum atendimento atribuido a setor nesta fila.';
   if (status === 'active') return 'Nenhum atendimento ativo. Abra a aba Espera e atenda um contato para iniciar.';
   if (status === 'finished') return 'Nenhum chat finalizado ainda.';
   return 'Nenhum contato em espera. O webhook recebido vai preencher esta fila.';
@@ -1373,8 +1402,18 @@ function getConversationStatusLabel(status) {
 }
 
 function conversationMatchesTab(item, tab) {
-  if (tab === 'groups') return Boolean(item.isGroup);
-  return !item.isGroup && (item.chatStatus || 'waiting') === tab;
+  return getConversationTab(item) === tab;
+}
+
+function getConversationTab(item) {
+  if (!item) return '';
+  if (item.isGroup) return 'groups';
+  const status = item.chatStatus || 'waiting';
+  if (status === 'waiting' && item.sectorId) return 'assigned';
+  if (status === 'waiting') return 'waiting';
+  if (status === 'active') return 'active';
+  if (status === 'finished') return 'finished';
+  return 'waiting';
 }
 
 function ConversationTags({ conversation }) {

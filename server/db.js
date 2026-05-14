@@ -1447,10 +1447,7 @@ export function listSupportSessions(filters = {}) {
     where.push("(lower(COALESCE(c.name, '')) LIKE @search OR lower(s.phone) LIKE @search OR lower(COALESCE(m.body, '')) LIKE @search)");
     params.search = `%${search}%`;
   }
-  if (viewer?.role !== 'admin' && viewer?.id) {
-    where.push("((s.status = 'waiting' AND s.assigned_user_id IS NULL) OR s.assigned_user_id = @viewerUserId)");
-    params.viewerUserId = viewer.id;
-  }
+  applyViewerSessionScope(where, params, viewer);
 
   const rows = db.prepare(`
     SELECT
@@ -1494,6 +1491,31 @@ export function listSupportSessions(filters = {}) {
   return rows.map(mapSessionRow);
 }
 
+function applyViewerSessionScope(where, params, viewer = null) {
+  if (!viewer || viewer.role === 'admin') return;
+  if (!viewer.id) {
+    where.push('1 = 0');
+    return;
+  }
+
+  const clauses = [
+    "(s.status = 'waiting' AND s.assigned_user_id IS NULL AND s.sector_id IS NULL)",
+    's.assigned_user_id = @viewerUserId'
+  ];
+  params.viewerUserId = viewer.id;
+
+  const sectorIds = getViewerSectorIds(viewer);
+  if (sectorIds.length) {
+    const placeholders = sectorIds.map((_, index) => `@viewerSectorId${index}`);
+    clauses.push(`s.sector_id IN (${placeholders.join(', ')})`);
+    sectorIds.forEach((sectorId, index) => {
+      params[`viewerSectorId${index}`] = sectorId;
+    });
+  }
+
+  where.push(`(${clauses.join(' OR ')})`);
+}
+
 export function listMessages(sessionId) {
   const messages = db.prepare(`
     SELECT * FROM messages
@@ -1524,7 +1546,9 @@ export function canAccessSupportSession(id, viewer = null) {
   const session = findSessionStmt.get(id);
   if (!session) return false;
   if (!viewer || viewer.role === 'admin') return true;
-  return (session.status === 'waiting' && !session.assigned_user_id) || session.assigned_user_id === viewer.id;
+  if (session.assigned_user_id === viewer.id) return true;
+  if (session.sector_id && getViewerSectorIds(viewer).includes(session.sector_id)) return true;
+  return session.status === 'waiting' && !session.assigned_user_id && !session.sector_id;
 }
 
 export function updateSupportSessionStatus(id, status, actorUser = null) {
@@ -2387,6 +2411,19 @@ function listUserSectors(userId) {
     WHERE us.user_id = ?
     ORDER BY s.name COLLATE NOCASE ASC
   `).all(userId).map(mapSector);
+}
+
+function getViewerSectorIds(viewer = null) {
+  const fromViewer = Array.isArray(viewer?.sectors)
+    ? viewer.sectors.map((sector) => sector?.id).filter(Boolean)
+    : [];
+  if (fromViewer.length) return [...new Set(fromViewer)];
+  if (!viewer?.id) return [];
+
+  return db.prepare('SELECT sector_id FROM user_sectors WHERE user_id = ?')
+    .all(viewer.id)
+    .map((row) => row.sector_id)
+    .filter(Boolean);
 }
 
 function setUserSectorIds(userId, sectorIds = []) {

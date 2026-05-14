@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { db } from '../server/db.js';
 import {
+  canAccessSupportSession,
   createMessage,
   cleanupWebhookStatusArtifacts,
   createSupportSessionEventForTest,
@@ -746,6 +747,67 @@ test('sectors can be linked to users and transferred sessions expose sector badg
   assert.equal(transferred.sectorName, sector.name);
   assert.equal(listed.sectorName, sector.name);
   assert.equal(listSectors().some((item) => item.id === sector.id), true);
+});
+
+test('sector scoped conversations are visible only to sector members and admins', () => {
+  const suffix = Date.now();
+  const sector = createSector({ name: `Triagem ${suffix}`, color: 'green', active: true });
+  const otherSector = createSector({ name: `Outro Setor ${suffix}`, color: 'orange', active: true });
+  const member = createUser({
+    name: `Membro Setor ${suffix}`,
+    email: `membro-setor-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true,
+    sectorIds: [sector.id]
+  });
+  const outsider = createUser({
+    name: `Fora Setor ${suffix}`,
+    email: `fora-setor-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'attendant',
+    active: true,
+    sectorIds: [otherSector.id]
+  });
+  const admin = createUser({
+    name: `Admin Setor ${suffix}`,
+    email: `admin-setor-${suffix}@example.test`,
+    password: 'senha-forte',
+    role: 'admin',
+    active: true
+  });
+  const openWaiting = createMessage({
+    phone: `551981${suffix}`,
+    name: 'Cliente Espera Aberta',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Ainda sem setor',
+    status: 'received'
+  });
+  const scoped = createMessage({
+    phone: `551982${suffix}`,
+    name: 'Cliente Setorizado',
+    direction: 'inbound',
+    type: 'text',
+    body: 'Preciso de triagem',
+    status: 'received'
+  });
+
+  transferSupportSession(scoped.sessionId, { targetSectorId: sector.id }, admin);
+
+  const memberVisible = listConversations({ viewer: member }).map((item) => item.id);
+  const outsiderVisible = listConversations({ viewer: outsider }).map((item) => item.id);
+  const adminVisible = listConversations({ viewer: admin }).map((item) => item.id);
+
+  assert.equal(memberVisible.includes(openWaiting.sessionId), true);
+  assert.equal(memberVisible.includes(scoped.sessionId), true);
+  assert.equal(outsiderVisible.includes(openWaiting.sessionId), true);
+  assert.equal(outsiderVisible.includes(scoped.sessionId), false);
+  assert.equal(adminVisible.includes(scoped.sessionId), true);
+  assert.equal(canAccessSupportSession(scoped.sessionId, member), true);
+  assert.equal(canAccessSupportSession(scoped.sessionId, outsider), false);
+  assert.equal(canAccessSupportSession(openWaiting.sessionId, outsider), true);
+  assert.equal(canAccessSupportSession(scoped.sessionId, admin), true);
 });
 
 test('support tags can be attached to attendances and are mapped in conversations', () => {

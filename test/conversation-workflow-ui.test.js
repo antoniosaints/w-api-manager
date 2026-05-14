@@ -22,9 +22,19 @@ const appSource = [mainSource, apiSource, shellSource, settingsSource].join('\n'
 test('inbox exposes waiting, active and finished tabs', () => {
   assert.match(mainSource, /conversationTabs/);
   assert.match(mainSource, /Espera/);
+  assert.match(mainSource, /Atribuidos/);
   assert.match(mainSource, /Ativos/);
   assert.match(mainSource, /Finalizados/);
   assert.match(stylesSource, /\.conversation-tabs/);
+});
+
+test('inbox tabs scroll horizontally with arrow buttons and no visible scrollbar', () => {
+  assert.match(mainSource, /conversationTabsRef/);
+  assert.match(mainSource, /scrollConversationTabs/);
+  assert.match(mainSource, /conversation-tabs-arrow/);
+  assert.match(stylesSource, /\.conversation-tabs-shell/);
+  assert.match(stylesSource, /scrollbar-width:\s*none/);
+  assert.match(stylesSource, /\.conversation-tabs::-webkit-scrollbar[\s\S]*display:\s*none/);
 });
 
 test('changing inbox tabs waits for the user to choose a conversation', () => {
