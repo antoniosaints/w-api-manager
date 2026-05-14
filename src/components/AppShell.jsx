@@ -29,7 +29,7 @@ export function Sidebar({ view, setView, settings, currentUser, collapsed, onTog
   return (
     <aside className={collapsed ? 'sidebar collapsed' : 'sidebar'}>
       <div className="brand">
-        <span className="brand-logo-frame">
+        <span className="brand-logo-frame p-0 border-none shadow-sm">
           <img className="brand-logo" src="/ura-logo.png" alt="Logo URA" />
         </span>
         <div className="brand-copy">

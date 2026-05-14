@@ -44,6 +44,19 @@ test('changing inbox tabs waits for the user to choose a conversation', () => {
   assert.doesNotMatch(mainSource, /setSelectedConversationId\(first\?\.id \|\| ''\)/);
 });
 
+test('mobile inbox opens selected conversations as a full-screen chat pane with back navigation', () => {
+  assert.match(mainSource, /mobileInboxPane/);
+  assert.match(mainSource, /mobilePaneClass/);
+  assert.match(mainSource, /setMobileInboxPane\('chat'\)/);
+  assert.match(mainSource, /onBackToList=\{\(\) => setMobileInboxPane\('list'\)\}/);
+  assert.match(chatWindowSource, /onBackToList/);
+  assert.match(chatWindowSource, /mobile-chat-back/);
+  assert.match(stylesSource, /\.inbox-layout\.mobile-chat-open \.conversation-list/);
+  assert.match(stylesSource, /\.inbox-layout\.mobile-list-open \.chat-panel/);
+  assert.match(stylesSource, /\.mobile-chat-back/);
+  assert.match(stylesSource, /100dvh/);
+});
+
 test('inbox exposes group tab and group sender labels', () => {
   assert.match(mainSource, /Grupos/);
   assert.match(mainSource, /isGroup/);

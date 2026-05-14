@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowDown,
+  ArrowLeft,
   CheckCircle2,
   CornerUpLeft,
   Loader2,
@@ -45,6 +46,7 @@ export function ChatWindow({
   sectors = [],
   supportTags = [],
   currentUser,
+  onBackToList,
   onSent,
   onError
 }) {
@@ -356,6 +358,15 @@ export function ChatWindow({
     <section className="chat-panel">
       <div className="chat-header justify-between">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="mobile-chat-back"
+            onClick={() => onBackToList?.()}
+            title="Voltar para conversas"
+            aria-label="Voltar para conversas"
+          >
+            <ArrowLeft size={19} />
+          </button>
           <ContactAvatar contact={selectedConversation} fallback={selectedPhone} large />
           <button
             type="button"

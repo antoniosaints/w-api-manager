@@ -1262,7 +1262,9 @@ function Inbox({
 }) {
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState('waiting');
+  const [mobileInboxPane, setMobileInboxPane] = useState('list');
   const conversationTabsRef = useRef(null);
+  const lastSelectedConversationIdRef = useRef('');
   const filtered = conversations.filter((item) => {
     const haystack = `${item.name} ${item.phone} ${item.lastMessage?.body || ''}`.toLowerCase();
     return conversationMatchesTab(item, activeTab) && haystack.includes(query.toLowerCase());
@@ -1277,6 +1279,19 @@ function Inbox({
     if (selectedTab && selectedTab !== activeTab) setActiveTab(selectedTab);
   }, [activeTab, selectedConversation]);
 
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setMobileInboxPane('list');
+      lastSelectedConversationIdRef.current = '';
+      return;
+    }
+
+    if (selectedConversationId !== lastSelectedConversationIdRef.current) {
+      setMobileInboxPane('chat');
+      lastSelectedConversationIdRef.current = selectedConversationId;
+    }
+  }, [selectedConversationId]);
+
   function scrollConversationTabs(direction) {
     const node = conversationTabsRef.current;
     if (!node) return;
@@ -1286,8 +1301,10 @@ function Inbox({
     });
   }
 
+  const mobilePaneClass = selectedConversationId && mobileInboxPane === 'chat' ? 'mobile-chat-open' : 'mobile-list-open';
+
   return (
-    <section className="inbox-layout">
+    <section className={`inbox-layout ${mobilePaneClass}`}>
       <aside className="conversation-list">
         {/* <div className="section-heading">
           <div>
@@ -1315,6 +1332,7 @@ function Inbox({
                 className={activeTab === status ? 'active' : ''}
                 onClick={() => {
                   setActiveTab(status);
+                  setMobileInboxPane('list');
                   setSelectedConversationId('');
                 }}
               >
@@ -1344,7 +1362,10 @@ function Inbox({
             <button
               key={item.id}
               className={item.id === selectedConversationId ? 'conversation selected' : 'conversation'}
-              onClick={() => setSelectedConversationId(item.id)}
+              onClick={() => {
+                setSelectedConversationId(item.id);
+                setMobileInboxPane('chat');
+              }}
             >
               <ContactAvatar contact={item} />
               <span className="conversation-copy">
@@ -1380,6 +1401,7 @@ function Inbox({
         sectors={sectors}
         supportTags={supportTags}
         currentUser={currentUser}
+        onBackToList={() => setMobileInboxPane('list')}
         onSent={onSent}
         onError={onError}
       />
