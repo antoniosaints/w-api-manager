@@ -267,6 +267,38 @@ test('normalizes W-API sticker payload using directPath when url is generic web 
   assert.equal(message.mediaPath, 'https://mmg.whatsapp.net/v/t62.15575-24/sticker.enc?ccb=11-4&oh=token');
 });
 
+test('normalizes static W-API sticker payload using directPath when url is generic app WhatsApp', () => {
+  const message = normalizeIncomingMessage({
+    event: 'webhookReceived',
+    messageId: 'sticker-static-1',
+    chat: {
+      id: '559984140666',
+      profilePicture: 'https://cdn.example.com/avatar.jpg'
+    },
+    sender: {
+      id: '559984140666',
+      pushName: 'Antonio'
+    },
+    moment: 1778757549,
+    msgContent: {
+      stickerMessage: {
+        url: 'https://a.whatsapp.net',
+        mimetype: 'image/webp',
+        mediaKey: 'abc',
+        directPath: '/v/t62.15575-24/static-sticker.enc?ccb=11-4&oh=token',
+        fileLength: '19684',
+        isAnimated: false
+      }
+    }
+  });
+
+  assert.equal(message.type, 'sticker');
+  assert.equal(message.mediaPath, 'https://mmg.whatsapp.net/v/t62.15575-24/static-sticker.enc?ccb=11-4&oh=token');
+  assert.equal(message.media.url, 'https://mmg.whatsapp.net/v/t62.15575-24/static-sticker.enc?ccb=11-4&oh=token');
+  assert.equal(message.media.directPath, '/v/t62.15575-24/static-sticker.enc?ccb=11-4&oh=token');
+  assert.equal(message.media.size, 19684);
+});
+
 test('detects W-API reaction payloads so they are not stored as chat messages', () => {
   assert.equal(isReactionPayload({
     event: 'webhookReceived',

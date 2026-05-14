@@ -65,6 +65,27 @@ test('extracts W-API sticker directPath when url is generic web WhatsApp', () =>
   });
 });
 
+test('extracts static W-API sticker directPath when url is generic app WhatsApp', () => {
+  const info = extractWhatsAppImageInfo({
+    msgContent: {
+      stickerMessage: {
+        url: 'https://a.whatsapp.net',
+        directPath: '/v/t62.15575-24/static-sticker.enc?ccb=11-4&oh=token',
+        mimetype: 'image/webp',
+        mediaKey: 'abc',
+        fileLength: '19684',
+        isAnimated: false
+      }
+    }
+  });
+
+  assert.deepEqual(info, {
+    url: 'https://mmg.whatsapp.net/v/t62.15575-24/static-sticker.enc?ccb=11-4&oh=token',
+    mimetype: 'image/webp',
+    mediaKey: 'abc'
+  });
+});
+
 test('extracts W-API audio metadata as decryptable media', () => {
   const info = extractWhatsAppMediaInfo({
     msgContent: {

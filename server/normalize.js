@@ -168,7 +168,7 @@ function firstMediaSource(source) {
   if (!source || typeof source !== 'object') return '';
   const media = findVisualMediaMessage(source) || {};
   const generic = extractMessageMediaInfo(source, { requireMediaKey: false });
-  const value = media.jpegThumbnail || resolveMediaUrl(media) || generic?.url || source.mediaUrl || source.url || '';
+  const value = media.jpegThumbnail || resolveMediaUrl(media, media.type || generic?.type) || generic?.url || source.mediaUrl || source.url || '';
   if (!value) return '';
   if (String(value).startsWith('data:image') || String(value).startsWith('http')) return String(value);
   return `data:${media.mimetype || 'image/jpeg'};base64,${value}`;
@@ -179,10 +179,10 @@ function firstMediaInfo(source) {
   return extractMessageMediaInfo(source, { requireMediaKey: false });
 }
 
-function resolveMediaUrl(media) {
+function resolveMediaUrl(media, type = '') {
   if (!media || typeof media !== 'object') return '';
   const url = [media.url, media.mediaUrl, media.link].find((value) => typeof value === 'string' && value.trim()) || '';
-  if (url && !isGenericWhatsAppWebUrl(url)) return url;
+  if (url && !isGenericWhatsAppUrl(url, type)) return url;
   return buildWhatsAppDirectPathUrl(media.directPath) || url;
 }
 
@@ -193,10 +193,13 @@ function buildWhatsAppDirectPathUrl(value) {
   return `${WHATSAPP_MEDIA_HOST}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-function isGenericWhatsAppWebUrl(value) {
+function isGenericWhatsAppUrl(value, type = '') {
   try {
     const url = new URL(value);
-    return url.hostname === 'web.whatsapp.net' && (url.pathname === '' || url.pathname === '/');
+    const isRoot = url.pathname === '' || url.pathname === '/';
+    if (!isRoot) return false;
+    if (url.hostname === 'web.whatsapp.net') return true;
+    return type === 'sticker' && url.hostname === 'a.whatsapp.net';
   } catch {
     return false;
   }
@@ -287,12 +290,14 @@ function inferMessageType(source, text, fallbackEvent) {
 function findVisualMediaMessage(source) {
   if (!source || typeof source !== 'object') return null;
   const content = source.msgContent || source.message || source;
-  return findImageMessage(source)
-    || content.stickerMessage
+  const image = findImageMessage(source);
+  if (image) return { ...image, type: 'image' };
+  const sticker = content.stickerMessage
     || content.sticker
     || content.associatedChildMessage?.message?.stickerMessage
     || content.associatedChildMessage?.message?.sticker
     || null;
+  return sticker ? { ...sticker, type: 'sticker' } : null;
 }
 
 function findImageMessage(source) {

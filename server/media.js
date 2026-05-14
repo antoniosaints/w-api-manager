@@ -27,11 +27,11 @@ export function extractWhatsAppMediaInfo(raw) {
 export function extractMessageMediaInfo(raw, options = {}) {
   const found = findMediaMessage(raw, options);
   const media = found?.media;
-  const url = resolveMediaUrl(media);
+  const type = found?.type || inferMediaType(media);
+  const url = resolveMediaUrl(media, type);
   if (!media || !url) return null;
   if (options.requireMediaKey && !media.mediaKey) return null;
 
-  const type = found.type || inferMediaType(media);
   return {
     type,
     url,
@@ -126,10 +126,10 @@ function findMediaMessage(raw, options = {}) {
   return null;
 }
 
-function resolveMediaUrl(media) {
+function resolveMediaUrl(media, type = '') {
   if (!media || typeof media !== 'object') return '';
   const url = [media.url, media.mediaUrl, media.link].find((value) => typeof value === 'string' && value.trim()) || '';
-  if (url && !isGenericWhatsAppWebUrl(url)) return url;
+  if (url && !isGenericWhatsAppUrl(url, type)) return url;
   return buildWhatsAppDirectPathUrl(media.directPath) || url;
 }
 
@@ -140,10 +140,13 @@ function buildWhatsAppDirectPathUrl(value) {
   return `${WHATSAPP_MEDIA_HOST}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-function isGenericWhatsAppWebUrl(value) {
+function isGenericWhatsAppUrl(value, type = '') {
   try {
     const url = new URL(value);
-    return url.hostname === 'web.whatsapp.net' && (url.pathname === '' || url.pathname === '/');
+    const isRoot = url.pathname === '' || url.pathname === '/';
+    if (!isRoot) return false;
+    if (url.hostname === 'web.whatsapp.net') return true;
+    return type === 'sticker' && url.hostname === 'a.whatsapp.net';
   } catch {
     return false;
   }
