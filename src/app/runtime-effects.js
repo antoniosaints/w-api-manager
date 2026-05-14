@@ -44,13 +44,39 @@ export function useLaunchRouteSelection({ launchRouteRef, currentUser, conversat
   useEffect(() => {
     const pendingRoute = launchRouteRef.current;
     if (!currentUser || !pendingRoute) return;
-    if (pendingRoute.view) setView(pendingRoute.view);
-    if (pendingRoute.sessionId && conversations.some((item) => item.id === pendingRoute.sessionId)) {
-      setSelectedConversationId(pendingRoute.sessionId);
-      launchRouteRef.current = null;
+
+    const selection = resolveLaunchRouteSelection({ pendingRoute, conversations });
+    if (selection.view) setView(selection.view);
+    if (selection.sessionId) setSelectedConversationId(selection.sessionId);
+    launchRouteRef.current = selection.nextRoute;
+    if (selection.clearRoute) {
       clearLaunchRoute();
     }
   }, [conversations, currentUser, launchRouteRef, setSelectedConversationId, setView]);
+}
+
+export function resolveLaunchRouteSelection({ pendingRoute, conversations }) {
+  if (!pendingRoute) {
+    return { view: '', sessionId: '', nextRoute: null, clearRoute: false };
+  }
+
+  const view = pendingRoute.view && !pendingRoute.viewApplied ? pendingRoute.view : '';
+  const sessionId = String(pendingRoute.sessionId || '').trim();
+
+  if (!sessionId) {
+    return { view, sessionId: '', nextRoute: null, clearRoute: true };
+  }
+
+  if (conversations.some((item) => item.id === sessionId)) {
+    return { view, sessionId, nextRoute: null, clearRoute: true };
+  }
+
+  return {
+    view,
+    sessionId: '',
+    nextRoute: { ...pendingRoute, viewApplied: true },
+    clearRoute: false
+  };
 }
 
 export function readLaunchRoute() {
