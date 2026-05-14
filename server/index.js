@@ -77,6 +77,7 @@ import { normalizePaymentStatus } from './payment.js';
 import { isGroupPayload, isReactionPayload, normalizeIncomingMessage, normalizeWebhookBatch } from './normalize.js';
 import { getPushPublicKey, sendPushForMessage } from './push.js';
 import { runAutomaticAgentForMessage } from './ai-agents.js';
+import { runAutoCloseActiveSessions } from './auto-close.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,6 +85,11 @@ const PORT = Number(process.env.PORT || 3333);
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '120mb';
 const OUTBOUND_UPLOAD_BODY_LIMIT = process.env.OUTBOUND_UPLOAD_BODY_LIMIT || '80mb';
+const configuredAutoCloseInterval = Number.parseInt(process.env.AUTO_CLOSE_CHECK_INTERVAL_MS || '60000', 10);
+const AUTO_CLOSE_CHECK_INTERVAL_MS = Number.isFinite(configuredAutoCloseInterval)
+  ? Math.max(30_000, configuredAutoCloseInterval)
+  : 60_000;
+let autoCloseRunning = false;
 
 const app = express();
 const server = http.createServer(app);
@@ -599,6 +605,8 @@ server.listen(PORT, () => {
   console.log(`W-API Atendimento server on http://localhost:${PORT}`);
 });
 
+startAutoCloseMonitor();
+
 function asyncHandler(handler) {
   return async (req, res, next) => {
     try {
@@ -670,6 +678,31 @@ function scheduleAutomaticAgent(message) {
       console.error('Automatic attendance failed:', error.message || error);
     }
   }, 0);
+}
+
+function startAutoCloseMonitor() {
+  const timer = setInterval(runAutomaticClosure, AUTO_CLOSE_CHECK_INTERVAL_MS);
+  timer.unref?.();
+  const initial = setTimeout(runAutomaticClosure, Math.min(5000, AUTO_CLOSE_CHECK_INTERVAL_MS));
+  initial.unref?.();
+}
+
+async function runAutomaticClosure() {
+  if (autoCloseRunning) return;
+  autoCloseRunning = true;
+  try {
+    const result = await runAutoCloseActiveSessions({
+      onMessage: emitState,
+      onConversationsChanged: emitConversations
+    });
+    for (const failure of result.failed || []) {
+      console.error(`Automatic closure failed for ${failure.phone}:`, failure.error);
+    }
+  } catch (error) {
+    console.error('Automatic closure failed:', error.message || error);
+  } finally {
+    autoCloseRunning = false;
+  }
 }
 
 function queuePushNotification(message) {

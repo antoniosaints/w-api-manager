@@ -7,6 +7,13 @@ import {
   normalizeConversationStatus,
   shouldCreateNewSessionForMessage
 } from './conversation-status.js';
+import {
+  DEFAULT_AUTO_CLOSE_IDLE_MINUTES,
+  DEFAULT_AUTO_CLOSE_MESSAGE,
+  normalizeAutoCloseIdleMinutes,
+  normalizeAutoCloseMessage,
+  normalizeAutoCloseSettings
+} from './auto-close-settings.js';
 
 const DB_PATH = process.env.WAPI_DB_PATH ? path.resolve(process.env.WAPI_DB_PATH) : path.join(path.resolve('data'), 'app.sqlite');
 const DATA_DIR = path.dirname(DB_PATH);
@@ -238,6 +245,9 @@ const envDefaults = {
   webhookPublicUrl: process.env.WEBHOOK_PUBLIC_URL || '',
   ignoreGroups: process.env.WAPI_IGNORE_GROUPS || 'false',
   automaticAttendance: process.env.WAPI_AUTOMATIC_ATTENDANCE || 'false',
+  autoCloseActiveConversations: process.env.WAPI_AUTO_CLOSE_ACTIVE_CONVERSATIONS || 'false',
+  autoCloseIdleMinutes: process.env.WAPI_AUTO_CLOSE_IDLE_MINUTES || String(DEFAULT_AUTO_CLOSE_IDLE_MINUTES),
+  autoCloseMessage: process.env.WAPI_AUTO_CLOSE_MESSAGE || DEFAULT_AUTO_CLOSE_MESSAGE,
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   pushVapidPublicKey: process.env.PUSH_VAPID_PUBLIC_KEY || '',
   pushVapidPrivateKey: process.env.PUSH_VAPID_PRIVATE_KEY || '',
@@ -303,6 +313,7 @@ export function getSettings() {
 
 export function publicSettings() {
   const settings = getSettings();
+  const autoClose = normalizeAutoCloseSettings(settings);
   return {
     baseUrl: settings.baseUrl,
     instanceId: settings.instanceId,
@@ -311,6 +322,9 @@ export function publicSettings() {
     hasToken: Boolean(settings.token),
     ignoreGroups: settings.ignoreGroups === 'true',
     automaticAttendance: settings.automaticAttendance === 'true',
+    autoCloseActiveConversations: autoClose.autoCloseActiveConversations,
+    autoCloseIdleMinutes: autoClose.autoCloseIdleMinutes,
+    autoCloseMessage: autoClose.autoCloseMessage,
     hasGeminiApiKey: Boolean(settings.geminiApiKey),
     hasPushConfigured: Boolean(settings.pushVapidPublicKey && settings.pushVapidPrivateKey)
   };
@@ -336,12 +350,28 @@ export function savePushConfiguration({ publicKey = '', privateKey = '', subject
 }
 
 export function saveSettings(nextSettings) {
-  const writable = ['baseUrl', 'instanceId', 'instanceJid', 'token', 'webhookPublicUrl', 'ignoreGroups', 'automaticAttendance', 'geminiApiKey'];
+  const writable = [
+    'baseUrl',
+    'instanceId',
+    'instanceJid',
+    'token',
+    'webhookPublicUrl',
+    'ignoreGroups',
+    'automaticAttendance',
+    'autoCloseActiveConversations',
+    'autoCloseIdleMinutes',
+    'autoCloseMessage',
+    'geminiApiKey'
+  ];
   const tx = db.transaction(() => {
     for (const key of writable) {
       if (Object.prototype.hasOwnProperty.call(nextSettings, key)) {
-        if (['ignoreGroups', 'automaticAttendance'].includes(key)) {
+        if (['ignoreGroups', 'automaticAttendance', 'autoCloseActiveConversations'].includes(key)) {
           setSettingStmt.run(key, nextSettings[key] ? 'true' : 'false');
+        } else if (key === 'autoCloseIdleMinutes') {
+          setSettingStmt.run(key, String(normalizeAutoCloseIdleMinutes(nextSettings[key])));
+        } else if (key === 'autoCloseMessage') {
+          setSettingStmt.run(key, normalizeAutoCloseMessage(nextSettings[key]));
         } else {
           setSettingStmt.run(key, String(nextSettings[key] ?? ''));
         }
@@ -1487,6 +1517,55 @@ export function listSupportSessions(filters = {}) {
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY datetime(COALESCE(s.last_message_at, s.started_at)) DESC
   `).all(params);
+
+  return rows.map(mapSessionRow);
+}
+
+export function listIdleActiveSupportSessions({ idleBefore, limit = 25 } = {}) {
+  const cutoff = idleBefore instanceof Date ? idleBefore.toISOString() : String(idleBefore || '').trim();
+  if (!cutoff) return [];
+  const safeLimit = Math.max(1, Math.min(100, Number.parseInt(String(limit || 25), 10) || 25));
+
+  const rows = db.prepare(`
+    SELECT
+      s.*,
+      c.name,
+      c.avatar_url,
+      c.is_group,
+      u.name AS assigned_user_name,
+      u.email AS assigned_user_email,
+      u.role AS assigned_user_role,
+      sec.name AS sector_name,
+      sec.color AS sector_color,
+      agent.name AS agent_name,
+      m.body AS last_body,
+      m.direction AS last_direction,
+      m.status AS last_status,
+      m.created_at AS last_created_at,
+      (
+        SELECT COUNT(*) FROM support_sessions count_s
+        WHERE count_s.contact_id = s.contact_id
+      ) AS support_count,
+      (
+        SELECT COUNT(*) FROM messages count_m
+        WHERE count_m.session_id = s.id
+      ) AS message_count
+    FROM support_sessions s
+    JOIN contacts c ON c.id = s.contact_id
+    LEFT JOIN users u ON u.id = s.assigned_user_id
+    LEFT JOIN sectors sec ON sec.id = s.sector_id
+    LEFT JOIN ai_agents agent ON agent.id = s.agent_id
+    LEFT JOIN messages m ON m.id = (
+      SELECT id FROM messages
+      WHERE session_id = s.id
+      ORDER BY datetime(created_at) DESC
+      LIMIT 1
+    )
+    WHERE s.status = 'active'
+      AND datetime(COALESCE(s.last_message_at, s.started_at)) <= datetime(@idleBefore)
+    ORDER BY datetime(COALESCE(s.last_message_at, s.started_at)) ASC
+    LIMIT @limit
+  `).all({ idleBefore: cutoff, limit: safeLimit });
 
   return rows.map(mapSessionRow);
 }

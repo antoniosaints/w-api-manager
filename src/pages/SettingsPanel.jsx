@@ -2,10 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { Copy, CreditCard, ExternalLink, Loader2, QrCode, RefreshCw, Save, Settings } from 'lucide-react';
 import { api } from '../shared/api.js';
 import { formatInvoiceAmount, formatInvoiceDate, normalizeInvoice } from '../shared/payment.js';
-import { Button, Card, Input, Switch } from '../components/ui/index.js';
+import { Button, Card, Input, Switch, Textarea } from '../components/ui/index.js';
 
 export function SettingsPanel({ settings, setSettings, currentUser, onError, showToast }) {
-  const [form, setForm] = useState({ baseUrl: '', instanceId: '', instanceJid: '', token: '', webhookPublicUrl: '', ignoreGroups: false, automaticAttendance: false, geminiApiKey: '' });
+  const [form, setForm] = useState({
+    baseUrl: '',
+    instanceId: '',
+    instanceJid: '',
+    token: '',
+    webhookPublicUrl: '',
+    ignoreGroups: false,
+    automaticAttendance: false,
+    autoCloseActiveConversations: false,
+    autoCloseIdleMinutes: 60,
+    autoCloseMessage: '',
+    geminiApiKey: ''
+  });
   const [saving, setSaving] = useState(false);
   const [invoicePayload, setInvoicePayload] = useState(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
@@ -21,6 +33,9 @@ export function SettingsPanel({ settings, setSettings, currentUser, onError, sho
       webhookPublicUrl: settings?.webhookPublicUrl || '',
       ignoreGroups: Boolean(settings?.ignoreGroups),
       automaticAttendance: Boolean(settings?.automaticAttendance),
+      autoCloseActiveConversations: Boolean(settings?.autoCloseActiveConversations),
+      autoCloseIdleMinutes: settings?.autoCloseIdleMinutes || 60,
+      autoCloseMessage: settings?.autoCloseMessage || '',
       geminiApiKey: ''
     });
   }, [settings]);
@@ -84,6 +99,9 @@ export function SettingsPanel({ settings, setSettings, currentUser, onError, sho
           <Input label="Chave Gemini" value={form.geminiApiKey} onChange={(event) => setForm({ ...form, geminiApiKey: event.target.value })} placeholder={settings?.hasGeminiApiKey ? 'Chave ja configurada' : 'API key do Gemini'} type="password" />
           <Switch label="Ignorar grupos" help="Quando ativo, eventos de grupos recebidos pela W-API nao viram atendimentos." checked={form.ignoreGroups} onChange={(event) => setForm({ ...form, ignoreGroups: event.target.checked })} />
           <Switch label="Atendimento automatico" help="Quando ativo, agentes de IA podem responder conversas em espera." checked={form.automaticAttendance} onChange={(event) => setForm({ ...form, automaticAttendance: event.target.checked })} />
+          <Switch label="Encerramento automatico" help="Fecha atendimentos ativos apos o tempo de ociosidade configurado." checked={form.autoCloseActiveConversations} onChange={(event) => setForm({ ...form, autoCloseActiveConversations: event.target.checked })} />
+          <Input label="Tempo de ociosidade" help="Minutos sem novas mensagens em atendimentos ativos." value={form.autoCloseIdleMinutes} onChange={(event) => setForm({ ...form, autoCloseIdleMinutes: event.target.value })} type="number" min="1" max="10080" inputMode="numeric" />
+          <Textarea label="Mensagem de finalizacao" help="Enviada antes de finalizar o atendimento automaticamente." value={form.autoCloseMessage} onChange={(event) => setForm({ ...form, autoCloseMessage: event.target.value })} rows={3} maxLength={1000} />
           <Button variant="primary" disabled={saving}>{saving ? <Loader2 className="spin" size={18} /> : <Save size={18} />}Salvar</Button>
         </form>
       </Card>

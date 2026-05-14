@@ -122,6 +122,16 @@ test('settings expose ignore groups option and sidebar can collapse', () => {
   assert.match(appSource, /Alternar menu/);
 });
 
+test('settings expose automatic closure controls for active attendance idle time', () => {
+  assert.match(settingsSource, /autoCloseActiveConversations/);
+  assert.match(settingsSource, /Encerramento automatico/);
+  assert.match(settingsSource, /autoCloseIdleMinutes/);
+  assert.match(settingsSource, /Tempo de ociosidade/);
+  assert.match(settingsSource, /autoCloseMessage/);
+  assert.match(settingsSource, /Mensagem de finalizacao/);
+  assert.match(settingsSource, /Textarea/);
+});
+
 test('message name header is controlled only from the admin user form', () => {
   assert.doesNotMatch(shellSource, /Nome da mensagem/);
   assert.match(usersSource, /sendNameHeader/);
