@@ -652,7 +652,7 @@ function DashboardPanelPro({ connected, settings }) {
             <Input label="Fim" type="date" value={filters.to} onChange={(event) => updateFilter({ to: event.target.value })} />
           </div>
         )}
-        <span className={connected ? 'status-pill connected' : 'status-pill'}>
+        <span className={connected ? 'status-pill connected hidden md:flex' : 'status-pill hidden md:flex'}>
           <CircleDot size={15} />
           {connected ? 'Instancia online' : settings?.instanceId || 'Instancia a verificar'}
         </span>
